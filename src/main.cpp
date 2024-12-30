@@ -23,6 +23,9 @@
 #include "version.h"
 #include "video.h"
 
+#include <boost/asio.hpp>
+#include <boost/asio/steady_timer.hpp>
+
 extern "C" {
 #include "rswrapper.h"
 }
@@ -41,6 +44,10 @@ on_signal(int sig, FN &&fn) {
   signal_handlers.emplace(sig, std::forward<FN>(fn));
 
   std::signal(sig, on_signal_forwarder);
+}
+
+void runIoContext(boost::asio::io_context& ioContext) {
+    ioContext.run();
 }
 
 std::map<std::string_view, std::function<int(const char *name, int argc, char **argv)>> cmd_to_func {
@@ -309,10 +316,20 @@ main(int argc, char *argv[]) {
     return -1;
   }
 
-  std::unique_ptr<platf::deinit_t> mDNS;
+  /*std::unique_ptr<platf::deinit_t> mDNS;
   auto sync_mDNS = std::async(std::launch::async, [&mDNS]() {
     mDNS = platf::publish::start();
-  });
+  });*/
+
+  
+  boost::asio::io_context ioContext;
+  boost::asio::steady_timer timer(ioContext);
+  BOOST_LOG(info) << "update timer thread create" << std::endl;
+
+  http::update_is_alive();
+  http::startTimer(timer);
+  std::thread ioThread([&ioContext]() { ioContext.run(); });
+  //ioThread.join();
 
   std::unique_ptr<platf::deinit_t> upnp_unmap;
   auto sync_upnp = std::async(std::launch::async, [&upnp_unmap]() {

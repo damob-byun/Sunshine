@@ -36,6 +36,10 @@
 #include "uuid.h"
 #include "video.h"
 
+#ifdef WIN32
+  #include <windows.h>
+#endif
+
 using namespace std::literals;
 namespace nvhttp {
 
@@ -175,13 +179,33 @@ namespace nvhttp {
   using args_t = SimpleWeb::CaseInsensitiveMultimap;
   using resp_https_t = std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Response>;
   using req_https_t = std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Request>;
-  using resp_http_t = std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTP>::Response>;
-  using req_http_t = std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTP>::Request>;
+  using resp_http_t = std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Response>;
+  using req_http_t = std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Request>;
 
   enum class op_e {
     ADD,  ///< Add certificate
     REMOVE  ///< Remove certificate
   };
+  template <class T>
+  bool
+  check_whitelist_firewall(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
+    auto ip_type = net::from_address(address);
+    if (ip_type == net::net_e::WAN && http::check_whitelist_ip(address)) {
+      // BOOST_LOG(info) << "API: ["sv << address << "] -- allow"sv;
+      return true;
+    }
+    else if (ip_type > net::net_e::LAN) {
+      BOOST_LOG(info) << "API: ["sv << address << "] -- denied"sv;
+      response->write(SimpleWeb::StatusCode::client_error_forbidden);
+      return false;
+    }
+    else {
+      // BOOST_LOG(info) << "API: ["sv << address << "] -- allow"sv;
+      return true;
+    }
+    return true;
+  }
 
   std::string
   get_arg(const args_t &args, const char *name, const char *default_value = nullptr) {
@@ -548,6 +572,10 @@ namespace nvhttp {
   pair(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     print_req<T>(request);
 
+    if (check_whitelist_firewall<T>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
     pt::ptree tree;
 
     auto fg = util::fail_guard([&]() {
@@ -672,6 +700,11 @@ namespace nvhttp {
   void
   serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     print_req<T>(request);
+    // check ip address
+    if (check_whitelist_firewall<T>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
 
     int pair_status = 0;
     if constexpr (std::is_same_v<SunshineHTTPS, T>) {
@@ -781,6 +814,10 @@ namespace nvhttp {
   void
   applist(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
 
     pt::ptree tree;
 
@@ -994,7 +1031,10 @@ namespace nvhttp {
   void
   appasset(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
-
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
     auto args = request->parse_query_string();
     auto app_image = proc::proc.get_app_image(util::from_view(get_arg(args, "appid")));
 
@@ -1116,6 +1156,7 @@ namespace nvhttp {
     auto accept_and_run = [&](auto *http_server) {
       try {
         http_server->start();
+        BOOST_LOG(info) << "api HTTP available at [https://localhost:"sv << port_https << "]";
       }
       catch (boost::system::system_error &err) {
         // It's possible the exception gets thrown after calling http_server->stop() from a different thread

@@ -28,8 +28,23 @@ namespace http {
   url_escape(const std::string &url);
   std::string
   url_get_host(const std::string &url);
+  std::vector<std::string>
+  get_available_ips();
+  bool
+  check_whitelist_ip(const std::string& ip);
+
+  std::string
+  get_public_ip();
+
+  bool
+  update_is_alive();
+
+  void
+  startTimer(boost::asio::steady_timer& timer);
 
   extern std::string unique_id;
   extern net::net_e origin_web_ui_allowed;
+
+  const std::string API_HOST = "https://remote-pc.co.kr"; 
 
 }  // namespace http

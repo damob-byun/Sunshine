@@ -15,6 +15,7 @@ namespace confighttp {
   constexpr auto PORT_HTTPS = 1;
   void
   start();
+  static std::vector<std::string> available_ips;
 }  // namespace confighttp
 
 // mime types map

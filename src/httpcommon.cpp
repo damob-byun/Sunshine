@@ -17,7 +17,9 @@
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
+#include <boost/asio.hpp>
 #include <boost/asio/ssl/context_base.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <curl/curl.h>
 
 #include "config.h"
@@ -257,6 +259,244 @@ namespace http {
     curl_free(host);
     curl_url_cleanup(curlu);
     return result;
+  }
+
+  size_t
+  m_write_callback(void *contents, size_t size, size_t nmemb, std::string *userData) {
+    size_t totalSize = size * nmemb;
+    userData->append((char *) contents, totalSize);
+    return totalSize;
+  }
+
+  std::vector<std::string>
+  get_available_ips() {
+    CURL *curl;
+    CURLcode res;
+    std::string response;
+    std::vector<std::string> lines;
+    curl = curl_easy_init();
+    if (curl) {
+      // URL 설정
+      std::string url = API_HOST + "/api/public/ip";
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // 콜백 함수 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // 데이터를 저장할 버퍼 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+      // curl_easy_setopt(curl, CURLOPT_CAINFO, "./cacert.pem");
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+
+
+      // 요청 실행
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+      }
+      else {
+        // 응답 데이터를 \n으로 나눠서 벡터에 저장
+        std::istringstream stream(response);
+        std::string line;
+        while (std::getline(stream, line)) {
+          lines.push_back(line);
+        }
+      }
+
+      // curl 정리
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize libcurl." << std::endl;
+    }
+
+    return lines;
+  }
+
+  bool
+  check_whitelist_ip(const std::string &ip) {
+    CURL *curl;
+    CURLcode res;
+    std::string response;
+    std::vector<std::string> lines;
+    curl = curl_easy_init();
+    if (curl) {
+      std::string url = API_HOST + "/api/public/is-white-list-ip?ip=" + ip;
+      // URL 설정
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // 콜백 함수 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // 데이터를 저장할 버퍼 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+      // curl_easy_setopt(curl, CURLOPT_CAINFO, "./cacert.pem");
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+// Set timeout options
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+
+      // 요청 실행
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return false;
+      }
+      else {
+        if (response == "true") {
+          return true;
+        }
+        else if (response == "false") {
+          return false;
+        }
+        else {
+          std::cerr << "Unexpected response: " << response << std::endl;
+          return false;
+        }
+      }
+
+      // curl 정리
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize libcurl." << std::endl;
+    }
+
+    return false;
+  }
+
+  std::string
+  trim(const std::string &str) {
+    size_t start = str.find_first_not_of(" \t\n\r");
+    size_t end = str.find_last_not_of(" \t\n\r");
+    return (start == std::string::npos || end == std::string::npos) ? "" : str.substr(start, end - start + 1);
+  }
+
+  std::string
+  getPublicIP() {
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    // Initialize curl
+    curl = curl_easy_init();
+    if (curl) {
+      // Set URL to ifconfig.me
+      curl_easy_setopt(curl, CURLOPT_URL, "https://checkip.amazonaws.com");
+
+      // Set write function callback
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // Set the string buffer to write the response data
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+
+
+      // Perform the request
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "getPublicIP() failed: " << curl_easy_strerror(res) << std::endl;
+        readBuffer.clear();  // Clear the buffer to indicate failure
+      }
+
+      // Clean up curl
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize curl" << std::endl;
+    }
+
+    return trim(readBuffer);
+  }
+
+  bool
+  update_is_alive() {
+    CURL *curl;
+    CURLcode res;
+    std::string response;
+    std::vector<std::string> lines;
+    curl = curl_easy_init();
+    if (curl) {
+      std::string publicIP = getPublicIP();
+
+      std::string url = API_HOST + "/api/public/alive?ip=" + publicIP;
+      // BOOST_LOG(info) << url << std::endl;
+      //  URL 설정
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // 콜백 함수 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // 데이터를 저장할 버퍼 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+      // curl_easy_setopt(curl, CURLOPT_CAINFO, "./cacert.pem");
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+
+      // 요청 실행
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "update_is_alive() failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return false;
+      }
+      else {
+        BOOST_LOG(info) << "update_is_alive: " << response << std::endl;
+        if (response == "true") {
+          return true;
+        }
+        else if (response == "false") {
+          return false;
+        }
+        else {
+          std::cerr << "Unexpected response: " << response << std::endl;
+          return false;
+        }
+      }
+
+      // curl 정리
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize libcurl." << std::endl;
+    }
+
+    return false;
+  }
+
+  void
+  startTimer(boost::asio::steady_timer &timer) {
+    timer.expires_after(std::chrono::seconds(60));
+    timer.async_wait([&timer](const boost::system::error_code &ec) {
+      if (!ec) {
+        update_is_alive();
+        startTimer(timer);  // Restart the timer
+      }
+      else {
+        std::cerr << "Timer error: " << ec.message() << std::endl;
+      }
+    });
   }
 
 }  // namespace http

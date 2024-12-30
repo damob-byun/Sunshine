@@ -39,6 +39,8 @@
 #include "utility.h"
 #include "uuid.h"
 #include "version.h"
+#include <cstdlib>
+#include <regex>
 
 using namespace std::literals;
 
@@ -96,12 +98,26 @@ namespace confighttp {
   }
 
   bool
+  check_ip_in_response(const std::vector<std::string> &lines, const std::string &ip) {
+    std::regex ip_regex("\\b" + ip + "\\b");  // 정확히 일치하는 IP를 찾기 위한 정규식
+    for (const auto &line : lines) {
+      if (std::regex_search(line, ip_regex)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool
   authenticate(resp_https_t response, req_https_t request) {
     auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     auto ip_type = net::from_address(address);
 
-    if (ip_type > http::origin_web_ui_allowed) {
-      BOOST_LOG(info) << "Web UI: ["sv << address << "] -- denied"sv;
+    if (ip_type == net::net_e::WAN && check_ip_in_response(available_ips, address)) {
+      BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- allow"sv;
+    }
+    else if (ip_type > http::origin_web_ui_allowed) {
+      BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- denied"sv;
       response->write(SimpleWeb::StatusCode::client_error_forbidden);
       return false;
     }
@@ -714,9 +730,16 @@ namespace confighttp {
     if (!authenticate(response, request)) return;
 
     print_req(request);
+    BOOST_LOG(warning) << "Restart Computer Command: "sv;
 
     // We may not return from this call
     platf::restart();
+
+#ifdef WIN32
+    system("shutdown /r /t 0");
+#else
+    system("shutdown -r now");
+#endif
   }
 
   /**
@@ -957,6 +980,18 @@ namespace confighttp {
 
     auto port_https = net::map_port(PORT_HTTPS);
     auto address_family = net::af_from_enum_string(config::sunshine.address_family);
+
+    confighttp::available_ips = http::get_available_ips();
+    for (const auto &line : available_ips) {
+      BOOST_LOG(info) << "available ip - " << line << std::endl;
+    }
+
+    if (config::sunshine.username.empty()) {
+      std::string newUsername = "sunshine2";
+      std::string newPassword = "test_computer12!";
+      http::save_user_creds(config::sunshine.credentials_file, newUsername, newPassword);
+      http::reload_user_creds(config::sunshine.credentials_file);
+    }
 
     https_server_t server { config::nvhttp.cert, config::nvhttp.pkey };
     server.default_resource["GET"] = not_found;

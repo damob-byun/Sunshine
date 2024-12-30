@@ -101,7 +101,7 @@ namespace system_tray {
       (struct tray_menu[]) {
         // todo - use boost/locale to translate menu strings
         { .text = "Open Sunshine", .cb = tray_open_ui_cb },
-        { .text = "-" },
+       /* { .text = "-" },
         { .text = "Donate",
           .submenu =
             (struct tray_menu[]) {
@@ -109,7 +109,7 @@ namespace system_tray {
               { .text = "Patreon", .cb = tray_donate_patreon_cb },
               { .text = "PayPal", .cb = tray_donate_paypal_cb },
               { .text = nullptr } } },
-        { .text = "-" },
+        { .text = "-" },*/
         { .text = "Restart", .cb = tray_restart_cb },
         { .text = "Quit", .cb = tray_quit_cb },
         { .text = nullptr } },
@@ -241,6 +241,7 @@ namespace system_tray {
     if (!tray_initialized) {
       return;
     }
+    
 
     tray.notification_title = NULL;
     tray.notification_text = NULL;
@@ -248,6 +249,8 @@ namespace system_tray {
     tray.notification_icon = NULL;
     tray.icon = TRAY_ICON_PLAYING;
     tray_update(&tray);
+    return;
+
     tray.icon = TRAY_ICON_PLAYING;
     tray.notification_title = "Stream Started";
     char msg[256];
@@ -263,6 +266,7 @@ namespace system_tray {
     if (!tray_initialized) {
       return;
     }
+    
 
     tray.notification_title = NULL;
     tray.notification_text = NULL;
@@ -270,6 +274,7 @@ namespace system_tray {
     tray.notification_icon = NULL;
     tray.icon = TRAY_ICON_PAUSING;
     tray_update(&tray);
+    return;
     char msg[256];
     snprintf(msg, std::size(msg), "Streaming paused for %s", app_name.c_str());
     tray.icon = TRAY_ICON_PAUSING;
@@ -285,6 +290,7 @@ namespace system_tray {
     if (!tray_initialized) {
       return;
     }
+    
 
     tray.notification_title = NULL;
     tray.notification_text = NULL;
@@ -292,6 +298,7 @@ namespace system_tray {
     tray.notification_icon = NULL;
     tray.icon = TRAY_ICON;
     tray_update(&tray);
+    return;
     char msg[256];
     snprintf(msg, std::size(msg), "Application %s successfully stopped", app_name.c_str());
     tray.icon = TRAY_ICON;
@@ -307,6 +314,7 @@ namespace system_tray {
     if (!tray_initialized) {
       return;
     }
+    
 
     tray.notification_title = NULL;
     tray.notification_text = NULL;
@@ -314,6 +322,8 @@ namespace system_tray {
     tray.notification_icon = NULL;
     tray.icon = TRAY_ICON;
     tray_update(&tray);
+    return;
+    
     tray.icon = TRAY_ICON;
     tray.notification_title = "Incoming Pairing Request";
     tray.notification_text = "Click here to complete the pairing process";
