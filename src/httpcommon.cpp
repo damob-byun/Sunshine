@@ -46,6 +46,7 @@ namespace http {
 
   std::string unique_id;
   net::net_e origin_web_ui_allowed;
+  std::string _my_public_ip;
 
   int
   init() {
@@ -291,9 +292,8 @@ namespace http {
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
-
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
 
       // 요청 실행
       res = curl_easy_perform(curl);
@@ -342,9 +342,9 @@ namespace http {
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
-// Set timeout options
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+      // Set timeout options
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
 
       // 요청 실행
       res = curl_easy_perform(curl);
@@ -404,9 +404,8 @@ namespace http {
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
-
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
 
       // Perform the request
       res = curl_easy_perform(curl);
@@ -433,9 +432,12 @@ namespace http {
     std::vector<std::string> lines;
     curl = curl_easy_init();
     if (curl) {
-      std::string publicIP = getPublicIP();
+      if (_my_public_ip.empty()) {
+        _my_public_ip = getPublicIP();
+        BOOST_LOG(info) << "my_public_ip: " + _my_public_ip << std::endl;
+      }
 
-      std::string url = API_HOST + "/api/public/alive?ip=" + publicIP;
+      std::string url = API_HOST + "/api/public/alive?ip=" + _my_public_ip;
       // BOOST_LOG(info) << url << std::endl;
       //  URL 설정
       curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -451,8 +453,8 @@ namespace http {
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);              // Total timeout of 10 seconds
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);        // Connection timeout of 5 seconds
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
 
       // 요청 실행
       res = curl_easy_perform(curl);
@@ -491,7 +493,7 @@ namespace http {
     timer.async_wait([&timer](const boost::system::error_code &ec) {
       if (!ec) {
         update_is_alive();
-        startTimer(timer);  // Restart the timer
+        startTimer(timer);
       }
       else {
         std::cerr << "Timer error: " << ec.message() << std::endl;

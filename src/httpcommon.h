@@ -40,7 +40,7 @@ namespace http {
   update_is_alive();
 
   void
-  startTimer(boost::asio::steady_timer& timer);
+  startTimer(boost::asio::steady_timer& timers);
 
   extern std::string unique_id;
   extern net::net_e origin_web_ui_allowed;

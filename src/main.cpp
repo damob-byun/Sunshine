@@ -331,10 +331,10 @@ main(int argc, char *argv[]) {
   std::thread ioThread([&ioContext]() { ioContext.run(); });
   //ioThread.join();
 
-  std::unique_ptr<platf::deinit_t> upnp_unmap;
+  /*std::unique_ptr<platf::deinit_t> upnp_unmap;
   auto sync_upnp = std::async(std::launch::async, [&upnp_unmap]() {
     upnp_unmap = upnp::start();
-  });
+  });*/
 
   // FIXME: Temporary workaround: Simple-Web_server needs to be updated or replaced
   if (shutdown_event->peek()) {
