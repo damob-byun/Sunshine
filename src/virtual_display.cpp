@@ -90,7 +90,7 @@ namespace virtual_display {
           std::cerr << "Resolution change failed." << std::endl;
         }
       }
-      else if (currentMode.dmPelsWidth == 3840 && currentMode.dmPelsHeight == 2160) {
+      else if (currentMode.dmPelsHeight == 2160) {
         std::cout << "Resolution is 3840x2160. Changing to 1920x1080 @ 60Hz..." << std::endl;
         // 해상도 변경
         if (change_resolution(1920, 1080, 60)) {

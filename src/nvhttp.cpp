@@ -860,9 +860,9 @@ namespace nvhttp {
     }
     if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(true);
-      std::thread delayedThread(delayed_check_resolution);
-      delayedThread.detach();
     }
+    std::thread delayedThread(delayed_check_resolution);
+    delayedThread.detach();
 
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
@@ -1070,7 +1070,7 @@ namespace nvhttp {
     if(virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(false);
     }
-    
+
     auto shutdown_event = mail::man->event<bool>(mail::shutdown);
 
     auto port_http = net::map_port(PORT_HTTP);
