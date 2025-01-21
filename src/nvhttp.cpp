@@ -18,6 +18,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <string>
+#include <thread>
 
 // local includes
 #include "config.h"
@@ -35,6 +36,7 @@
 #include "utility.h"
 #include "uuid.h"
 #include "video.h"
+#include "virtual_display.h"
 
 #ifdef WIN32
   #include <windows.h>
@@ -845,8 +847,22 @@ namespace nvhttp {
   }
 
   void
+  delayed_check_resolution() {
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    virtual_display::check_resolution();
+  }
+  void
   launch(bool &host_audio, resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
+    if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
+      virtual_display::toggle_virtual_display(true);
+      std::thread delayedThread(delayed_check_resolution);
+      delayedThread.detach();
+    }
 
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
@@ -1009,6 +1025,9 @@ namespace nvhttp {
   cancel(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
 
+    if (virtual_display::exist_virtual_display() == true) {
+      virtual_display::toggle_virtual_display(false);
+    }
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
       std::ostringstream data;
@@ -1047,6 +1066,11 @@ namespace nvhttp {
 
   void
   start() {
+
+    if(virtual_display::exist_virtual_display() == true) {
+      virtual_display::toggle_virtual_display(false);
+    }
+    
     auto shutdown_event = mail::man->event<bool>(mail::shutdown);
 
     auto port_http = net::map_port(PORT_HTTP);
