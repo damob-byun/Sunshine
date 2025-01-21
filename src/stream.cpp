@@ -10,7 +10,10 @@
 #include <fstream>
 #include <openssl/err.h>
 
+
 #include <boost/endian/arithmetic.hpp>
+
+#include <thread>
 
 extern "C" {
 // clang-format off
@@ -30,6 +33,7 @@ extern "C" {
 #include "thread_safe.h"
 #include "utility.h"
 
+#include "virtual_display.h"
 #include "platform/common.h"
 
 #define IDX_START_A 0
@@ -1958,9 +1962,23 @@ namespace stream {
 
       BOOST_LOG(debug) << "Session ended"sv;
     }
+    void
+    delayed_check_resolution() {
+      std::this_thread::sleep_for(std::chrono::seconds(3));
+      BOOST_LOG(warning) << "check_resolution start"sv;
+      virtual_display::check_resolution();
+    }
+
 
     int
     start(session_t &session, const std::string &addr_string) {
+      if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
+        BOOST_LOG(warning) << "virtual_display true"sv;
+        virtual_display::toggle_virtual_display(true);
+      }
+      std::thread delayedThread(delayed_check_resolution);
+      delayedThread.detach();
+
       session.input = input::alloc(session.mail);
 
       session.broadcast_ref = broadcast.ref();

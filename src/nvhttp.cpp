@@ -849,6 +849,7 @@ namespace nvhttp {
   void
   delayed_check_resolution() {
     std::this_thread::sleep_for(std::chrono::seconds(3));
+    BOOST_LOG(warning) << "check_resolution start"sv;
     virtual_display::check_resolution();
   }
   void
@@ -858,12 +859,6 @@ namespace nvhttp {
       response->write("forbidden"s);
       return;
     }
-    if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
-      virtual_display::toggle_virtual_display(true);
-    }
-    std::thread delayedThread(delayed_check_resolution);
-    delayedThread.detach();
-
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
       std::ostringstream data;
