@@ -193,8 +193,12 @@ namespace nvhttp {
   check_whitelist_firewall(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     auto ip_type = net::from_address(address);
-    if (ip_type == net::net_e::WAN && http::check_whitelist_ip(address)) {
-      // BOOST_LOG(info) << "API: ["sv << address << "] -- allow"sv;
+    if(address_whitelist.find(address) != address_whitelist.end()) {
+      return true;
+    }
+    else if (ip_type == net::net_e::WAN && http::check_whitelist_ip(address)) {
+      address_whitelist.insert(address);
+      BOOST_LOG(warning) << "API: ["sv << address << "] -- allow"sv;
       return true;
     }
     else if (ip_type > net::net_e::LAN) {
@@ -203,7 +207,8 @@ namespace nvhttp {
       return false;
     }
     else {
-      // BOOST_LOG(info) << "API: ["sv << address << "] -- allow"sv;
+      address_whitelist.insert(address);
+      BOOST_LOG(warning) << "API: ["sv << address << "] -- allow"sv;
       return true;
     }
     return true;
@@ -701,7 +706,7 @@ namespace nvhttp {
   template <class T>
   void
   serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
-    print_req<T>(request);
+    //print_req<T>(request);
     // check ip address
     if (check_whitelist_firewall<T>(response, request) == false) {
       response->write("forbidden"s);

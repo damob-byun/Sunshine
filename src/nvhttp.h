@@ -5,6 +5,7 @@
 // macros
 #pragma once
 
+#include <unordered_set>
 // standard includes
 #include <string>
 
@@ -89,4 +90,7 @@ namespace nvhttp {
    */
   void
   erase_all_clients();
+
+  
+  std::unordered_set<std::string> address_whitelist;
 }  // namespace nvhttp

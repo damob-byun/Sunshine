@@ -79,7 +79,7 @@ namespace virtual_display {
                 << "@" << currentMode.dmDisplayFrequency << "Hz" << std::endl;
 
       // 현재 해상도가 800x600인지 확인
-      if (currentMode.dmPelsWidth == 800 && currentMode.dmPelsHeight == 600) {
+      if (currentMode.dmPelsWidth < 1000 && currentMode.dmPelsHeight < 800) {
         std::cout << "Resolution is 800x600. Changing to 1920x1080 @ 60Hz..." << std::endl;
 
         // 해상도 변경
