@@ -10,7 +10,6 @@
 #include <fstream>
 #include <openssl/err.h>
 
-
 #include <boost/endian/arithmetic.hpp>
 
 #include <thread>
@@ -33,8 +32,8 @@ extern "C" {
 #include "thread_safe.h"
 #include "utility.h"
 
-#include "virtual_display.h"
 #include "platform/common.h"
+#include "virtual_display.h"
 
 #define IDX_START_A 0
 #define IDX_START_B 1
@@ -1969,7 +1968,6 @@ namespace stream {
       virtual_display::check_resolution();
     }
 
-
     int
     start(session_t &session, const std::string &addr_string) {
       BOOST_LOG(warning) << "start stream!!"sv;
@@ -1977,8 +1975,14 @@ namespace stream {
         BOOST_LOG(warning) << "virtual_display true"sv;
         virtual_display::toggle_virtual_display(true);
       }
-      std::thread delayedThread(delayed_check_resolution);
-      delayedThread.detach();
+      if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
+        virtual_display::toggle_virtual_display(true);
+        std::thread delayedThread(delayed_check_resolution);
+        delayedThread.join();
+      }
+      else {
+        virtual_display::check_resolution();
+      }
 
       session.input = input::alloc(session.mail);
 

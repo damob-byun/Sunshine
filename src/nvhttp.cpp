@@ -867,9 +867,12 @@ namespace nvhttp {
     }
     if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(true);
+      std::thread delayedThread(delayed_check_resolution);
+      delayedThread.join();
+    }else{
+      virtual_display::check_resolution();
     }
-    std::thread delayedThread(delayed_check_resolution);
-    delayedThread.detach();
+    
 
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
@@ -962,9 +965,12 @@ namespace nvhttp {
     }
     if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(true);
+      std::thread delayedThread(delayed_check_resolution);
+      delayedThread.join();
+    }else{
+      virtual_display::check_resolution();
     }
-    std::thread delayedThread(delayed_check_resolution);
-    delayedThread.detach();
+    
 
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
