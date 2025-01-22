@@ -92,5 +92,4 @@ namespace nvhttp {
   erase_all_clients();
 
   
-  std::unordered_set<std::string> address_whitelist;
 }  // namespace nvhttp

@@ -177,6 +177,7 @@ namespace nvhttp {
   std::unordered_map<std::string, pair_session_t> map_id_sess;
   client_t client_root;
   std::atomic<uint32_t> session_id_counter;
+  std::unordered_set<std::string> address_whitelist;
 
   using args_t = SimpleWeb::CaseInsensitiveMultimap;
   using resp_https_t = std::shared_ptr<typename SimpleWeb::ServerBase<SunshineHTTPS>::Response>;
