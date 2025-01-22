@@ -1972,6 +1972,7 @@ namespace stream {
 
     int
     start(session_t &session, const std::string &addr_string) {
+      BOOST_LOG(warning) << "start stream!!"sv;
       if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
         BOOST_LOG(warning) << "virtual_display true"sv;
         virtual_display::toggle_virtual_display(true);
