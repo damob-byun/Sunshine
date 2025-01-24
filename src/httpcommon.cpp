@@ -501,4 +501,53 @@ namespace http {
     });
   }
 
+
+  std::string
+  get_lastest_version() {
+    CURL *curl;
+    CURLcode res;
+    std::string response;
+    std::vector<std::string> lines;
+    curl = curl_easy_init();
+    if (curl) {
+      std::string url = API_HOST + "/api/public/sunshine-version";
+      // BOOST_LOG(info) << url << std::endl;
+      //  URL 설정
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // 콜백 함수 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // 데이터를 저장할 버퍼 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+      // curl_easy_setopt(curl, CURLOPT_CAINFO, "./cacert.pem");
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
+
+      // 요청 실행
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "get_latest_version() failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return response;
+      }
+      else {
+        BOOST_LOG(info) << "latest_version: " << response << std::endl;
+        return response;
+      }
+
+      // curl 정리
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize libcurl." << std::endl;
+    }
+
+    return response;
+  }
 }  // namespace http
