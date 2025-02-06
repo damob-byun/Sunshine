@@ -35,7 +35,6 @@ list(PREPEND PLATFORM_LIBRARIES
     ksuser
     ws2_32
     wsock32
-    libminizip.a
     iphlpapi
     ${CURL_STATIC_LIBRARIES})
 

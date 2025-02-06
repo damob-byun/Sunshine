@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
-
+#include <tlhelp32.h>
 #include <openssl/sha.h> 
 
 //#include <minizip/unzip.h>
@@ -14,7 +14,50 @@
   #include <windows.h>
 #endif
 
+
+
 namespace fs = std::filesystem;
+
+bool kill_process_by_name(const std::string& process_name) {
+  HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (hSnapshot == INVALID_HANDLE_VALUE) {
+    std::cerr << "Failed to create snapshot of processes." << std::endl;
+    return false;
+  }
+
+  PROCESSENTRY32 pe;
+  pe.dwSize = sizeof(PROCESSENTRY32);
+
+  if (Process32First(hSnapshot, &pe)) {
+    do {
+      if (process_name == pe.szExeFile) {
+        HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+        if (hProcess == NULL) {
+          std::cerr << "Failed to open process for termination: " << process_name << std::endl;
+          CloseHandle(hSnapshot);
+          return false;
+        }
+
+        if (!TerminateProcess(hProcess, 0)) {
+          std::cerr << "Failed to terminate process: " << process_name << std::endl;
+          CloseHandle(hProcess);
+          CloseHandle(hSnapshot);
+          return false;
+        }
+
+        CloseHandle(hProcess);
+        std::cout << "Successfully terminated process: " << process_name << std::endl;
+        CloseHandle(hSnapshot);
+        return true;
+      }
+    } while (Process32Next(hSnapshot, &pe));
+  }
+
+  std::cerr << "Process not found: " << process_name << std::endl;
+  CloseHandle(hSnapshot);
+  return false;
+}
+
 
 std::string
   get_parent_directory(const std::string &path) {
@@ -27,7 +70,12 @@ std::string
     std::filesystem::path p(trimmed_path);
     return p.parent_path().string();
   }
-
+std::string 
+get_self_path() {
+   char path[MAX_PATH];
+  GetModuleFileName(NULL, path, MAX_PATH);
+  return get_parent_directory(std::string(path));
+}
   bool
   make_directory(const std::string &path) {
     // first, check if the directory already exists
@@ -106,74 +154,25 @@ std::string calculate_sha256(const std::string& filePath) {
     return oss.str();
 }
 
+bool extract_zip_with_powerShell(const std::string& zipPath, const std::string& outputPath) {
+    // PowerShell 명령 생성
+    std::string command = "powershell -Command \"Expand-Archive -LiteralPath '"
+                          + zipPath + "' -DestinationPath '"
+                          + outputPath + "' -Force\"";
 
-// ZIP 파일 압축 해제 함수 (파일 덮어쓰기 포함)
-/*bool
-extract_zip_and_replace(const std::string &zipPath) {
-  unzFile zipFile = unzOpen(zipPath.c_str());
-  if (!zipFile) {
-    std::cerr << "Failed to open ZIP file: " << zipPath << std::endl;
-    return false;
-  }
+    // PowerShell 명령 실행
+    int result = std::system(command.c_str());
 
-  if (unzGoToFirstFile(zipFile) != UNZ_OK) {
-    std::cerr << "Failed to read first file in ZIP archive." << std::endl;
-    unzClose(zipFile);
-    return false;
-  }
-
-  do {
-    char fileName[256];
-    unz_file_info fileInfo;
-    if (unzGetCurrentFileInfo(zipFile, &fileInfo, fileName, sizeof(fileName), NULL, 0, NULL, 0) != UNZ_OK) {
-      std::cerr << "Failed to get file info from ZIP archive." << std::endl;
-      unzClose(zipFile);
-      return false;
-    }
-
-    std::string filePath = fileName;
-
-    // 디렉토리인지 파일인지 확인
-    if (fileName[fileInfo.size_filename - 1] == '/') {
-      // 디렉토리인 경우 생성
-      fs::create_directories(filePath);
-    }
-    else {
-      // 파일인 경우
-      if (unzOpenCurrentFile(zipFile) != UNZ_OK) {
-        std::cerr << "Failed to open file in ZIP archive: " << fileName << std::endl;
-        unzClose(zipFile);
+    // 결과 확인
+    if (result == 0) {
+        std::cout << "Successfully extracted ZIP file to: " << outputPath << std::endl;
+        return true;
+    } else {
+        std::cerr << "Failed to extract ZIP file. PowerShell returned code: " << result << std::endl;
         return false;
-      }
-
-      std::ofstream outFile(filePath, std::ios::binary);
-      if (!outFile.is_open()) {
-        std::cerr << "Failed to create file: " << filePath << std::endl;
-        unzCloseCurrentFile(zipFile);
-        unzClose(zipFile);
-        return false;
-      }
-
-      char buffer[8192];
-      int bytesRead;
-      while ((bytesRead = unzReadCurrentFile(zipFile, buffer, sizeof(buffer))) > 0) {
-        outFile.write(buffer, bytesRead);
-      }
-
-      outFile.close();
-      unzCloseCurrentFile(zipFile);
-
-      if (bytesRead < 0) {
-        std::cerr << "Error reading file from ZIP archive: " << fileName << std::endl;
-        unzClose(zipFile);
-        return false;
-      }
     }
-  } while (unzGoToNextFile(zipFile) == UNZ_OK);
+}
 
-  unzClose(zipFile);
-  return true;
-}*/
 
 // 프로그램 교체 함수
 bool
@@ -193,6 +192,70 @@ replace_file(const std::string &oldFilePath, const std::string &newFilePath) {
   }
 }
 
+bool directory_exists(const std::string& path) {
+  DWORD file_attributes = GetFileAttributes(path.c_str());
+  if (file_attributes == INVALID_FILE_ATTRIBUTES) {
+    return false;
+  }
+  return (file_attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+bool create_directory_if_not_exists(const std::string& path) {
+  if (!directory_exists(path)) {
+    if (!CreateDirectory(path.c_str(), NULL)) {
+      if (GetLastError() != ERROR_ALREADY_EXISTS) {
+        std::cerr << "Failed to create directory: " << path << ". Error: " << GetLastError() << std::endl;
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+
+bool replace_all(const std::string& source_dir, const std::string& dest_dir) {
+  WIN32_FIND_DATA find_file_data;
+  HANDLE hFind = FindFirstFile((source_dir + "\\*").c_str(), &find_file_data);
+
+  if (hFind == INVALID_HANDLE_VALUE) {
+    std::cerr << "Failed to find first file in directory: " << source_dir << std::endl;
+    return false;
+  }
+
+  // Ensure the destination directory exists
+  if (!create_directory_if_not_exists(dest_dir)) {
+    FindClose(hFind);
+    return false;
+  }
+
+  do {
+    const std::string file_name = find_file_data.cFileName;
+    if (file_name == "." || file_name == "..") {
+      continue;
+    }
+
+    const std::string source_path = source_dir + "\\" + file_name;
+    const std::string dest_path = dest_dir + "\\" + file_name;
+
+    if (find_file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      // Recursively move subdirectories
+      if (!replace_all(source_path, dest_path)) {
+        FindClose(hFind);
+        return false;
+      }
+    } else {
+      // Move files
+      if (!MoveFileEx(source_path.c_str(), dest_path.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING)) {
+        std::cerr << "Failed to move file: " << source_path << " to " << dest_path << ". Error: " << GetLastError() << std::endl;
+        FindClose(hFind);
+        return false;
+      }
+    }
+  } while (FindNextFile(hFind, &find_file_data) != 0);
+
+  FindClose(hFind);
+  return true;
+}
 void
 relaunch_program(const std::string &programPath) {
 #ifdef _WIN32
@@ -216,14 +279,18 @@ relaunch_program(const std::string &programPath) {
 
 int
 main(int argc, char *argv[]) {
-  if (argc < 2) {
-    std::cerr << "Usage: updater <program_to_update>" << std::endl;
-    return 1;
+  std::string program_path;  
+  if (argc >= 2) {
+    program_path = argv[1];
+  }else{
+    program_path = get_self_path() + "\\Sunshine.exe";
   }
 
-  const std::string program_path = argv[1];  // 업데이트 경로
-  const std::string temp_update_file = "update.zip";  // 다운로드한 임시 업데이트 파일
-  const std::string temp_checksum_file = "update.zip.sha256"; 
+  // 업데이트 경로
+  std::cout << "program_path - " << program_path << std::endl;
+
+  const std::string temp_update_file = get_self_path() + "\\update.zip";  // 다운로드한 임시 업데이트 파일
+  const std::string temp_checksum_file = get_self_path() + "\\update.zip.sha256"; 
   std::cout << "Starting update process..." << std::endl;
 
   // 업데이트 전 대기 (프로그램 종료 대기 시간)
@@ -253,17 +320,27 @@ main(int argc, char *argv[]) {
 
 
   std::cout << "Extracting update files..." << std::endl;
-  /*if (!extract_zip_and_replace(temp_update_file)) {
+  if (!extract_zip_with_powerShell(temp_update_file, get_parent_directory(program_path))) {
     std::cerr << "Failed to extract update files." << std::endl;
     return 1;
   }
+
+  if (!kill_process_by_name("Sunshine.exe")) {
+    std::cerr << "Failed to terminate Sunshine.exe if it was running." << std::endl;
+  }
+
+  const std::string extracted_path = get_parent_directory(program_path) + "\\Sunshine";
+  if (!replace_all(extracted_path, get_parent_directory(program_path))) {
+    std::cerr << "Failed to replace program file." << std::endl;
+    return 1;
+  }
+
+
   std::cout << "Update completed successfully." << std::endl;
-  std::cout << "Update successful. Restarting program..." << std::endl;*/
+  std::cout << "Update successful. Restarting program..." << std::endl;
 
   // 프로그램 재실행
   relaunch_program(program_path);
-
-  std::cin.get();
 
   return 0;
 }
