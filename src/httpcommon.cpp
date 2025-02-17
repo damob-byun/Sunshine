@@ -534,7 +534,7 @@ namespace http {
       if (res != CURLE_OK) {
         std::cerr << "get_latest_version() failed: " << curl_easy_strerror(res) << std::endl;
         curl_easy_cleanup(curl);
-        return response;
+        return "";
       }
       else {
         BOOST_LOG(info) << "latest_version: " << response << std::endl;

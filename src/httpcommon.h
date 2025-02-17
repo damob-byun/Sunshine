@@ -36,6 +36,9 @@ namespace http {
   std::string
   get_public_ip();
 
+  std::string
+  get_latest_version();
+
   bool
   update_is_alive();
 
