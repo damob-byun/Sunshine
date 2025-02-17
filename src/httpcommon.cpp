@@ -503,7 +503,7 @@ namespace http {
 
 
   std::string
-  get_lastest_version() {
+  get_latest_version() {
     CURL *curl;
     CURLcode res;
     std::string response;

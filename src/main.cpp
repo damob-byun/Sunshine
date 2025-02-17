@@ -329,6 +329,14 @@ main(int argc, char *argv[]) {
   BOOST_LOG(info) << "update timer thread create" << std::endl;
 
   http::update_is_alive();
+  auto latest_version = http::get_latest_version();
+  if(latest_version !== "" && latest_version != PROJECT_VER) {
+    BOOST_LOG(info) << "New version available: " << latest_version << std::endl;
+    //excute update.exe ./update/update.exe
+    std::string update_path = "./update.exe";
+    BOOST_LOG(info) << "Start updater" << std::endl;
+    int result = std::system(update_path);
+  }
   http::startTimer(timer);
   std::thread ioThread([&ioContext]() { ioContext.run(); });
   //ioThread.join();

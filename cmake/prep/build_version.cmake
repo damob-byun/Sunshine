@@ -26,7 +26,7 @@ else()
         )
         # Gather current commit
         execute_process(
-                COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+                COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
                 OUTPUT_VARIABLE GIT_DESCRIBE_VERSION
                 RESULT_VARIABLE GIT_DESCRIBE_ERROR_CODE
                 OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -40,13 +40,15 @@ else()
         if(NOT GIT_DESCRIBE_ERROR_CODE)
             MESSAGE("Sunshine Branch: ${GIT_DESCRIBE_BRANCH}")
             if(NOT GIT_DESCRIBE_BRANCH STREQUAL "master")
-                set(PROJECT_VERSION ${PROJECT_VERSION}.${GIT_DESCRIBE_VERSION})
+                #set(PROJECT_VERSION ${PROJECT_VERSION}.${GIT_DESCRIBE_VERSION})
                 MESSAGE("Sunshine Version: ${GIT_DESCRIBE_VERSION}")
             endif()
             if(GIT_IS_DIRTY)
-                set(PROJECT_VERSION ${PROJECT_VERSION}.dirty)
+                #set(PROJECT_VERSION ${PROJECT_VERSION}.dirty)
                 MESSAGE("Git tree is dirty!")
             endif()
+            # add git commit hash to version
+            set(PROJECT_VERSION ${GIT_DESCRIBE_VERSION})
         else()
             MESSAGE(ERROR ": Got git error while fetching tags: ${GIT_DESCRIBE_ERROR_CODE}")
         endif()
