@@ -316,17 +316,22 @@ main(int argc, char *argv[]) {
       std::cerr << "Checksum mismatch. Expected: " << expected_checksum << ", got: " << checksum << std::endl;
       return 1;
     }
+  }else{
+    std::cerr << "Failed to download checksum file." << std::endl;
+    return 1;
   }
 
 
+
+  if (!kill_process_by_name("Sunshine.exe")) {
+    std::cerr << "Failed to terminate Sunshine.exe if it was running." << std::endl;
+  }
+
+  
   std::cout << "Extracting update files..." << std::endl;
   if (!extract_zip_with_powerShell(temp_update_file, get_parent_directory(program_path))) {
     std::cerr << "Failed to extract update files." << std::endl;
     return 1;
-  }
-
-  if (!kill_process_by_name("Sunshine.exe")) {
-    std::cerr << "Failed to terminate Sunshine.exe if it was running." << std::endl;
   }
 
   const std::string extracted_path = get_parent_directory(program_path) + "\\Sunshine";

@@ -31,6 +31,7 @@
 extern "C" {
 #include "rswrapper.h"
 }
+#include "file_handler.h"
 
 using namespace std::literals;
 
@@ -330,11 +331,12 @@ main(int argc, char *argv[]) {
 
   http::update_is_alive();
   auto latest_version = http::get_latest_version();
-  if(latest_version != "" && latest_version != PROJECT_VER) {
+  if(latest_version != "" latest_version != PROJECT_VER) {
     BOOST_LOG(info) << "New version available: " << latest_version << std::endl;
     //excute update.exe ./update/update.exe
     BOOST_LOG(info) << "Start updater" << std::endl;
-    std::system("./update.exe");
+    auto updater_path = file_handler::get_self_path()+"\\updater.exe";
+    std::system(updater_path.c_str());
   }
   http::startTimer(timer);
   std::thread ioThread([&ioContext]() { ioContext.run(); });
