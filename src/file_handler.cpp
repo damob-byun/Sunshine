@@ -11,6 +11,11 @@
 #include "file_handler.h"
 #include "logging.h"
 
+#ifdef _WIN32
+    #include <windows.h>
+#elif __APPLE__
+    #include <mach-o/dyld.h>
+#endif
 namespace file_handler {
   std::string
   get_parent_directory(const std::string &path) {
@@ -23,6 +28,22 @@ namespace file_handler {
     std::filesystem::path p(trimmed_path);
     return p.parent_path().string();
   }
+
+  std::string 
+get_self_path() {
+  char buffer[1024];
+
+    #ifdef _WIN32
+        GetModuleFileNameA(NULL, buffer, sizeof(buffer));
+    #elif __APPLE__
+        uint32_t size = sizeof(buffer);
+        _NSGetExecutablePath(buffer, &size);
+    #else
+        return std::filesystem::canonical("/proc/self/exe");
+    #endif
+    return get_parent_directory(std::string(buffer));
+  
+}
 
   bool
   make_directory(const std::string &path) {

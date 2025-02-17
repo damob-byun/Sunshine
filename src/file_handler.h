@@ -54,4 +54,8 @@ namespace file_handler {
    */
   int
   write_file(const char *path, const std::string_view &contents);
+
+  std::string 
+  get_self_path();
+
 }  // namespace file_handler
