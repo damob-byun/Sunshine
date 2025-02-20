@@ -20,3 +20,10 @@ mkdir build
 cmake -B build -G Ninja -S .
 ninja -C build
 ```
+
+### Sunshine Package
+
+```bash
+cpack -G NSIS --config ./CPackConfig.cmake
+cpack -G ZIP --config ./CPackConfig.cmake
+```

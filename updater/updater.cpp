@@ -230,7 +230,7 @@ bool replace_all(const std::string& source_dir, const std::string& dest_dir) {
 
   do {
     const std::string file_name = find_file_data.cFileName;
-    if (file_name == "." || file_name == "..") {
+    if (file_name == "." || file_name == ".." || file_name == "updater.exe" || file_name == "update.zip" || file_name == "update.zip.sha256" ) {
       continue;
     }
 
@@ -246,6 +246,7 @@ bool replace_all(const std::string& source_dir, const std::string& dest_dir) {
     } else {
       // Move files
       if (!MoveFileEx(source_path.c_str(), dest_path.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING)) {
+        std::cerr << "FileName : " << file_name << std::endl;
         std::cerr << "Failed to move file: " << source_path << " to " << dest_path << ". Error: " << GetLastError() << std::endl;
         FindClose(hFind);
         return false;
@@ -323,8 +324,11 @@ main(int argc, char *argv[]) {
 
 
 
-  if (!kill_process_by_name("Sunshine.exe")) {
-    std::cerr << "Failed to terminate Sunshine.exe if it was running." << std::endl;
+  if (!kill_process_by_name("sunshine.exe")) {
+    std::cerr << "Failed to terminate sunshine.exe if it was running." << std::endl;
+  }
+  if (!kill_process_by_name("sunshinesvc.exe")) {
+    std::cerr << "Failed to terminate sunshinesvc.exe if it was running." << std::endl;
   }
 
   
@@ -346,6 +350,8 @@ main(int argc, char *argv[]) {
 
   // 프로그램 재실행
   relaunch_program(program_path);
+
+ 
 
   return 0;
 }

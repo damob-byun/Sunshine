@@ -7,7 +7,8 @@ install(TARGETS sunshine RUNTIME DESTINATION "." COMPONENT application)
 install(FILES "${ZLIB}" DESTINATION "." COMPONENT application)
 
 # Adding updater
-install(FILES " ${PROJECT_SOURCE_DIR}/updater/build/updater.exe" DESTINATION "." COMPONENT application)
+install(FILES "/updater/build/updater.exe" DESTINATION "." COMPONENT application)
+#file(COPY "${PROJECT_SOURCE_DIR}/updater/build/updater.exe" DESTINATION ".")
 
 # Adding tools
 install(TARGETS dxgi-info RUNTIME DESTINATION "tools" COMPONENT dxgi)
