@@ -32,6 +32,12 @@ extern "C" {
 #include "rswrapper.h"
 }
 #include "file_handler.h"
+#ifdef _WIN32
+  #include "platform/windows/misc.h"
+  #include <windows.h>
+#endif
+
+
 
 using namespace std::literals;
 
@@ -332,11 +338,27 @@ main(int argc, char *argv[]) {
   http::update_is_alive();
   auto latest_version = http::get_latest_version();
   if(latest_version != "" && latest_version != PROJECT_VER) {
+    BOOST_LOG(info) << "Current Version: " << PROJECT_VER << std::endl;
     BOOST_LOG(info) << "New version available: " << latest_version << std::endl;
     //excute update.exe ./update/update.exe
-    BOOST_LOG(info) << "Start updater" << std::endl;
-    auto updater_path = file_handler::get_self_path()+"\\updater.exe";
-    std::system(updater_path.c_str());
+    std::string updater_path = "\""+file_handler::get_self_path()+"\\updater.exe"+"\"";
+    #ifdef _WIN32
+    // DETACHED_PROCESS 플래그를 사용하여 독립적인 프로세스로 실행
+    //std::wstring wpath_cmd = platf::from_utf8(updater_path);
+    BOOST_LOG(info) << "Start updater : " << updater_path << std::endl;
+
+    auto working_dir = boost::filesystem::path(file_handler::get_self_path());
+    std::error_code ec;
+    auto this_env = boost::this_process::environment();
+    auto child = platf::run_command(true, false, updater_path, working_dir, this_env, nullptr, ec, nullptr);
+    if (ec) {
+      BOOST_LOG(warning) << "Couldn't spawn ["sv << updater_path << "]: System: "sv << ec.message();
+    }
+    else {
+      child.detach();
+    }
+    #endif
+    
   }
   http::startTimer(timer);
   std::thread ioThread([&ioContext]() { ioContext.run(); });

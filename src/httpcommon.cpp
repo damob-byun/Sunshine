@@ -537,7 +537,7 @@ namespace http {
         return "";
       }
       else {
-        BOOST_LOG(info) << "latest_version: " << response << std::endl;
+        //BOOST_LOG(info) << "latest_version: " << response << std::endl;
         return response;
       }
 

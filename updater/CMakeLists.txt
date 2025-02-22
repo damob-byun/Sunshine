@@ -21,7 +21,7 @@ find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CURL REQUIRED libcurl)
 
-#find_library(MINIZIP_LIBRARY minizip REQUIRED)
+
 # libcurl 정적 링크 설정
 set(OPENSSL_LIBRARIES
         libssl.a
@@ -36,6 +36,10 @@ list(PREPEND PLATFORM_LIBRARIES
     ws2_32
     wsock32
     iphlpapi
+    ${CMAKE_SOURCE_DIR}/minizip-ng/build/libminizip.a
+    ${ZLIB_LIBRARIES}
+    -lbz2
+    -llzma
     ${CURL_STATIC_LIBRARIES})
 
 # curl
@@ -53,7 +57,6 @@ add_executable(${EXECUTABLE_NAME} ${SOURCES})
 
 # 실행 파일에 라이브러리 연결
 target_link_libraries(${EXECUTABLE_NAME}
-    ${MINIZIP_LIBRARY} # minizip 라이브러리
     ${OPENSSL_LIBRARIES}
     ${PLATFORM_LIBRARIES}
 )
