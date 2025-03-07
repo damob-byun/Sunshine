@@ -337,9 +337,10 @@ main(int argc, char *argv[]) {
 
   http::update_is_alive();
   auto latest_version = http::get_latest_version();
+  BOOST_LOG(info) << "Current Version: " << PROJECT_VER << std::endl;
+  BOOST_LOG(info) << "New version available: " << latest_version << std::endl;
   if(latest_version.size() == 40 && latest_version != "" && latest_version != PROJECT_VER) {
-    BOOST_LOG(info) << "Current Version: " << PROJECT_VER << std::endl;
-    BOOST_LOG(info) << "New version available: " << latest_version << std::endl;
+    
     //excute update.exe ./update/update.exe
     std::string updater_path = "\""+file_handler::get_self_path()+"\\updater.exe"+"\"";
     #ifdef _WIN32

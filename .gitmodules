@@ -66,3 +66,8 @@
 	path = third-party/wlr-protocols
 	url = https://gitlab.freedesktop.org/wlroots/wlr-protocols.git
 	branch = master
+[submodule "updater/minizip-ng"]
+	path = updater/minizip-ng
+	url = https://github.com/zlib-ng/minizip-ng.git
+	branch = master
+

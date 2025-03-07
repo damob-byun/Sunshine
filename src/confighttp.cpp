@@ -112,7 +112,12 @@ namespace confighttp {
   authenticate(resp_https_t response, req_https_t request) {
     auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     auto ip_type = net::from_address(address);
-
+    if (available_ips.empty()) {
+      available_ips = http::get_available_ips();
+      for (const auto &line : available_ips) {
+        BOOST_LOG(info) << "available ip - " << line << std::endl;
+      }
+    }
     if (ip_type == net::net_e::WAN && check_ip_in_response(available_ips, address)) {
       BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- allow"sv;
     }
@@ -732,14 +737,16 @@ namespace confighttp {
     print_req(request);
     BOOST_LOG(warning) << "Restart Computer Command: "sv;
 
+    
+#ifdef WIN32
+system("shutdown /r /t 0");
+#else
+system("shutdown -r now");
+#endif
+
     // We may not return from this call
     platf::restart();
 
-#ifdef WIN32
-    system("shutdown /r /t 0");
-#else
-    system("shutdown -r now");
-#endif
   }
 
   /**
