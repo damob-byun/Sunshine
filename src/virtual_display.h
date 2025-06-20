@@ -36,22 +36,22 @@ namespace virtual_display {
   //////////////////////////////////////////////////
 
   // Display name info.
-  const char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
-  const char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
+  //const static char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
+  //const static char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
 
   // Apdater GUID to obtain the device handle.
   // {00b41627-04c4-429e-a26e-0265cf50c8fa}
-  const GUID VDD_ADAPTER_GUID = { 0x00b41627, 0x04c4, 0x429e, { 0xa2, 0x6e, 0x02, 0x65, 0xcf, 0x50, 0xc8, 0xfa } };
-  const char *VDD_ADAPTER_NAME = "Parsec Virtual Display Adapter";
+  const static GUID VDD_ADAPTER_GUID = { 0x00b41627, 0x04c4, 0x429e, { 0xa2, 0x6e, 0x02, 0x65, 0xcf, 0x50, 0xc8, 0xfa } };
+  //const static char *VDD_ADAPTER_NAME = "Parsec Virtual Display Adapter";
 
   // Class and hwid to query device status.
   // {4d36e968-e325-11ce-bfc1-08002be10318}
-  const GUID VDD_CLASS_GUID = { 0x4d36e968, 0xe325, 0x11ce, { 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 } };
-  const char *VDD_HARDWARE_ID = "Root\\Parsec\\VDA";
+  const static GUID VDD_CLASS_GUID = { 0x4d36e968, 0xe325, 0x11ce, { 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 } };
+  const static char *VDD_HARDWARE_ID = "Root\\Parsec\\VDA";
 
   // Actually up to 16 devices could be created per adapter
   //  so just use a half to avoid plugging lag.
-  const int VDD_MAX_DISPLAYS = 8;
+  const static int VDD_MAX_DISPLAYS = 8;
 
   // Core IoControl codes, see usage below.
   typedef enum {
@@ -103,8 +103,8 @@ namespace virtual_display {
   vdd_version(HANDLE vdd);
 
   DWORD
-  vddIo_control(HANDLE vdd, VddCtlCode code, const void *data, size_t size);
+  vdd_io_control(HANDLE vdd, VddCtlCode code, const void *data, size_t size);
      
-  std::vector<int> displays;
-  HANDLE global_vdd = NULL;
+  static std::vector<int> displays;
+  static HANDLE global_vdd = NULL;  // Global VDD handle, should be closed by close_device_handle after use.
 }  // namespace virtual_display

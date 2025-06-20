@@ -175,10 +175,16 @@ namespace virtual_display {
         return true;
       }
     }
+    close_device_handle(global_vdd);
+    global_vdd = NULL;
     return false;
   }
   bool
   exist_virtual_display() {
+    if(global_vdd != NULL && global_vdd != INVALID_HANDLE_VALUE) {
+      // Check if the device is still OK.
+      return true;
+    }
     DeviceStatus status = query_device_status(&VDD_CLASS_GUID, VDD_HARDWARE_ID);
     if (status != DEVICE_OK) {
       printf("Parsec VDD device is not OK, got status %d.\n", status);
