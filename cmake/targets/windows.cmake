@@ -4,4 +4,5 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll")
 find_library(ZLIB ZLIB1)
 list(APPEND SUNSHINE_EXTERNAL_LIBRARIES
         Windowsapp.lib
+        cfgmgr32
         Wtsapi32.lib)
