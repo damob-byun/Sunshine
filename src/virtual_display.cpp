@@ -3,57 +3,54 @@
  * @brief virtual_display.h is a header file for the virtual display.
  */
 #include "virtual_display.h"
-#include <iostream>
-#include <stdexcept>
-#include <dxgi1_2.h>
 #include <windows.h>
+
 #include "logging.h"
 #include "platform/windows/misc.h"
-
 namespace virtual_display {
-  
-bool isMonitorActive() {
 
-    IDXGIFactory1* pFactory = nullptr;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory))) {
-        std::cerr << "Failed to create DXGIFactory1." << std::endl;
-        return false;
-    }
+  bool
+  isMonitorActive() {
+    UINT32 numPaths = 0, numModes = 0;
+    LONG status = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &numPaths, &numModes);
+    if (status != ERROR_SUCCESS) return false;
+    if (numPaths == 0 || numModes == 0) return false;
 
-    bool foundActive = false;
-    UINT adapterIndex = 0;
-    IDXGIAdapter1* pAdapter = nullptr;
-    while (pFactory->EnumAdapters1(adapterIndex, &pAdapter) != DXGI_ERROR_NOT_FOUND) {
-        DXGI_ADAPTER_DESC1 adapterDesc;
-        if (SUCCEEDED(pAdapter->GetDesc1(&adapterDesc))) {
-            // platf::to_utf8로 변환 후 비교
-            std::string desc_utf8 = platf::to_utf8(adapterDesc.Description);
-            BOOST_LOG(info) << "VDD: Adapter " << adapterIndex << ": " << desc_utf8;
-            if (desc_utf8.find("Microsoft Basic Render Driver") != std::string::npos) {
-                pAdapter->Release();
-                adapterIndex++;
-                continue;
-            }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(numPaths);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(numModes);
+
+    status = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &numPaths, paths.data(), &numModes, modes.data(), nullptr);
+    if (status != ERROR_SUCCESS) return false;
+
+    for (UINT32 i = 0; i < numPaths; ++i) {
+      const DISPLAYCONFIG_PATH_INFO &path = paths[i];
+      if (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_IN_USE) {
+        DISPLAYCONFIG_TARGET_DEVICE_NAME deviceName = {};
+        deviceName.header.adapterId = path.targetInfo.adapterId;
+        deviceName.header.id = path.targetInfo.id;
+        deviceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+        deviceName.header.size = sizeof(deviceName);
+
+        if (DisplayConfigGetDeviceInfo(&deviceName.header) == ERROR_SUCCESS) {
+          std::string monitorName = platf::to_utf8(deviceName.monitorFriendlyDeviceName);
+          BOOST_LOG(info) << "VDD: Monitor Name: " << monitorName << std::endl;
+          // 모니터 이름이 비어있고, 연결된 출력이 1개뿐이면 실제 모니터로 간주
+          if (monitorName.empty() && numPaths == 1) {
+            continue;
+          }
+          // "Generic Non-PnP Monitor" 또는 "Microsoft Basic Render Driver"는 무시
+          if (monitorName.find("Generic") != std::string::npos ||
+              monitorName.find("Basic Render Driver") != std::string::npos) {
+            continue;
+          }
+          // 실제 모니터가 연결되어 있음
+          return true;
         }
-
-        UINT outputIndex = 0;
-        IDXGIOutput* pOutput = nullptr;
-        while (pAdapter->EnumOutputs(outputIndex, &pOutput) != DXGI_ERROR_NOT_FOUND) {
-            DXGI_OUTPUT_DESC outputDesc;
-            if (SUCCEEDED(pOutput->GetDesc(&outputDesc))) {
-                if (outputDesc.AttachedToDesktop) {
-                    foundActive = true;
-                }
-            }
-            pOutput->Release();
-            outputIndex++;
-        }
-        pAdapter->Release();
-        adapterIndex++;
+      }
     }
-    pFactory->Release();
-    return foundActive;
-}
+    displays.clear();
+    return false;
+  }
 
   bool
   change_resolution(int width, int height, int refreshRate) {
@@ -70,7 +67,7 @@ bool isMonitorActive() {
       return true;
     }
     else {
-      std::cerr << "VDD: Failed to change resolution. Error code: " << result << std::endl;
+      BOOST_LOG(error) << "VDD: Failed to change resolution. Error code: " << result << std::endl;
       return false;
     }
   }
@@ -81,12 +78,11 @@ bool isMonitorActive() {
     currentMode.dmSize = sizeof(currentMode);
     if (EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &currentMode)) {
       BOOST_LOG(info) << "\nVDD: Current Resolution: "
-                << currentMode.dmPelsWidth << "x" << currentMode.dmPelsHeight
-                << "@" << currentMode.dmDisplayFrequency << "Hz" << std::endl;
+                      << currentMode.dmPelsWidth << "x" << currentMode.dmPelsHeight
+                      << "@" << currentMode.dmDisplayFrequency << "Hz" << std::endl;
 
       // 현재 해상도가 800x600인지 확인
       if (currentMode.dmPelsWidth < 1100 && currentMode.dmPelsHeight < 800) {
-
         BOOST_LOG(info) << "Resolution is 800x600 or 1024x768. Changing to 1920x1080 @ 60Hz..." << std::endl;
 
         // 해상도 변경
@@ -94,7 +90,7 @@ bool isMonitorActive() {
           BOOST_LOG(info) << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
         }
         else {
-          std::cerr << "Resolution change failed." << std::endl;
+          BOOST_LOG(error) << "Resolution change failed." << std::endl;
         }
       }
       else if (currentMode.dmPelsHeight >= 2000) {
@@ -104,7 +100,7 @@ bool isMonitorActive() {
           BOOST_LOG(info) << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
         }
         else {
-          std::cerr << "Resolution change failed." << std::endl;
+          BOOST_LOG(error) << "Resolution change failed." << std::endl;
         }
       }
       else {
@@ -112,57 +108,19 @@ bool isMonitorActive() {
       }
     }
     else {
-      std::cerr << "Failed to get current display settings." << std::endl;
+      BOOST_LOG(error) << "Failed to get current display settings." << std::endl;
     }
     return true;
   }
-  std::string
-  execute_inline_powerShell(const std::string &command) {
-    std::string fullCommand = "powershell.exe -ExecutionPolicy Bypass -Command \"" + command + "\"";
-
-    std::string result;
-    HANDLE hStdOutRead, hStdOutWrite;
-    SECURITY_ATTRIBUTES sa;
-    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = NULL;
-
-    if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) {
-      throw std::runtime_error("Failed to create pipe.");
-    }
-
-    if (!SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0)) {
-      throw std::runtime_error("Failed to set handle information.");
-    }
-
-    PROCESS_INFORMATION pi = { 0 };
-    STARTUPINFO si = { 0 };
-    si.cb = sizeof(STARTUPINFO);
-    si.hStdOutput = hStdOutWrite;
-    si.hStdError = hStdOutWrite;
-    si.dwFlags |= STARTF_USESTDHANDLES;
-
-    if (!CreateProcess(NULL, const_cast<char *>(fullCommand.c_str()), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-      throw std::runtime_error("Failed to create process.");
-    }
-
-    CloseHandle(hStdOutWrite);
-
-    char buffer[128];
-    DWORD bytesRead;
-    while (ReadFile(hStdOutRead, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
-      buffer[bytesRead] = '\0';
-      result += buffer;
-    }
-
-    CloseHandle(hStdOutRead);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-
-    return result;
-  }
   bool
   toggle_virtual_display(bool enable) {
+    if (global_vdd == NULL || global_vdd == INVALID_HANDLE_VALUE) {
+      BOOST_LOG(warning) << "VDD: VDD device does not exist, trying to create.";
+      if (!exist_virtual_display()) {
+        BOOST_LOG(warning) << "VDD: Failed to create VDD device.";
+        return false;
+      }
+    }
     if (displays.size() > 0 && !enable) {
       int index = displays.back();
       vdd_remove_display(global_vdd, index);
@@ -171,7 +129,7 @@ bool isMonitorActive() {
 
       return true;
     }
-    if(displays.size() > 0  && enable) {
+    if (displays.size() > 0 && enable) {
       BOOST_LOG(warning) << "VDD: Already one added, cannot add more.";
       return false;
     }
@@ -180,7 +138,7 @@ bool isMonitorActive() {
         int index = vdd_add_display(global_vdd);
         if (index != -1) {
           displays.push_back(index);
-          BOOST_LOG(warning) <<  "VDD: Added a new virtual display, index: " <<  index;
+          BOOST_LOG(warning) << "VDD: Added a new virtual display, index: " << index;
         }
         else {
           BOOST_LOG(warning) << "VDD: Add virtual display failed.";
@@ -194,21 +152,21 @@ bool isMonitorActive() {
   }
   bool
   exist_virtual_display() {
-    if(global_vdd != NULL && global_vdd != INVALID_HANDLE_VALUE) {
+    if (global_vdd != NULL && global_vdd != INVALID_HANDLE_VALUE) {
       // Check if the device is still OK.
       BOOST_LOG(warning) << "VDD: VDD device already exists, no need to reinitialize.";
       return true;
     }
     DeviceStatus status = query_device_status(&VDD_CLASS_GUID, VDD_HARDWARE_ID);
     if (status != DEVICE_OK) {
-      BOOST_LOG(warning) << "VDD: VDD device is not OK, got status "  << status;
+      BOOST_LOG(warning) << "VDD: VDD device is not OK, got status " << status;
       return false;
     }
 
     // Obtain device handle.
     global_vdd = open_device_handle(&VDD_ADAPTER_GUID);
     if (global_vdd == NULL || global_vdd == INVALID_HANDLE_VALUE) {
-      BOOST_LOG(warning) << "VDD: Failed to obtain the device handle " ;
+      BOOST_LOG(warning) << "VDD: Failed to obtain the device handle ";
       return false;
     }
     return true;

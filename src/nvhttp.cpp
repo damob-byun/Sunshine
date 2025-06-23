@@ -537,22 +537,22 @@ namespace nvhttp {
   template <class T>
   void
   print_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
-    BOOST_LOG(info) << "TUNNEL :: "sv << tunnel<T>::to_string;
+    BOOST_LOG(debug) << "TUNNEL :: "sv << tunnel<T>::to_string;
 
-    BOOST_LOG(info) << "METHOD :: "sv << request->method;
-    BOOST_LOG(info) << "DESTINATION :: "sv << request->path;
+    BOOST_LOG(debug) << "METHOD :: "sv << request->method;
+    BOOST_LOG(debug) << "DESTINATION :: "sv << request->path;
 
     for (auto &[name, val] : request->header) {
-      BOOST_LOG(info) << name << " -- " << val;
+      BOOST_LOG(debug) << name << " -- " << val;
     }
 
-    BOOST_LOG(info) << " [--] "sv;
+    BOOST_LOG(debug) << " [--] "sv;
 
     for (auto &[name, val] : request->parse_query_string()) {
-      BOOST_LOG(info) << name << " -- " << val;
+      BOOST_LOG(debug) << name << " -- " << val;
     }
 
-    BOOST_LOG(info) << " [--] "sv;
+    BOOST_LOG(debug) << " [--] "sv;
   }
 
   template <class T>
@@ -853,12 +853,6 @@ namespace nvhttp {
   }
 
   void
-  delayed_check_resolution() {
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    BOOST_LOG(warning) << "check_resolution start"sv;
-    virtual_display::check_resolution();
-  }
-  void
   launch(bool &host_audio, resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
     if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
@@ -867,8 +861,6 @@ namespace nvhttp {
     }
     if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(true);
-      std::thread delayedThread(delayed_check_resolution);
-      delayedThread.join();
     }else{
       virtual_display::check_resolution();
     }
@@ -965,8 +957,6 @@ namespace nvhttp {
     }
     if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
       virtual_display::toggle_virtual_display(true);
-      std::thread delayedThread(delayed_check_resolution);
-      delayedThread.join();
     }else{
       virtual_display::check_resolution();
     }
