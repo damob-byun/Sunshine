@@ -34,6 +34,8 @@ extern "C" {
 
 #include "platform/common.h"
 
+#include "virtual_display.h"
+
 #define IDX_START_A 0
 #define IDX_START_B 1
 #define IDX_INVALIDATE_REF_FRAMES 2
@@ -1960,17 +1962,17 @@ namespace stream {
 
       BOOST_LOG(debug) << "Session ended"sv;
     }
-    /*void
+    void
     delayed_check_resolution() {
       std::this_thread::sleep_for(std::chrono::seconds(3));
       BOOST_LOG(warning) << "check_resolution start"sv;
       virtual_display::check_resolution();
-    }*/
+    }
 
     int
     start(session_t &session, const std::string &addr_string) {
       BOOST_LOG(warning) << "start stream!!"sv;
-      /*if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
+      if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
         BOOST_LOG(warning) << "virtual_display true"sv;
         virtual_display::toggle_virtual_display(true);
       }
@@ -1981,7 +1983,7 @@ namespace stream {
       }
       else {
         virtual_display::check_resolution();
-      }*/
+      }
 
       session.input = input::alloc(session.mail);
 

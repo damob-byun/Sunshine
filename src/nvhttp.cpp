@@ -1047,10 +1047,6 @@ namespace nvhttp {
   void
   cancel(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
-
-    if (virtual_display::exist_virtual_display() == true) {
-      virtual_display::toggle_virtual_display(false);
-    }
     pt::ptree tree;
     auto g = util::fail_guard([&]() {
       std::ostringstream data;
@@ -1091,7 +1087,7 @@ namespace nvhttp {
   start() {
 
     if(virtual_display::exist_virtual_display() == true) {
-      virtual_display::toggle_virtual_display(false);
+      virtual_display::toggle_virtual_display(true);
     }
 
     auto shutdown_event = mail::man->event<bool>(mail::shutdown);

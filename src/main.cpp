@@ -35,7 +35,7 @@ extern "C" {
   #include <windows.h>
 #endif
 
-
+#include "virtual_display.h"
 
 using namespace std::literals;
 
@@ -79,6 +79,8 @@ SessionMonitorWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     case WM_ENDSESSION: {
       // Terminate ourselves with a blocking exit call
       std::cout << "Received WM_ENDSESSION"sv << std::endl;
+      //화면 제거
+      virtual_display::toggle_virtual_display(false);
       lifetime::exit_sunshine(0, false);
       return 0;
     }
@@ -255,6 +257,8 @@ main(int argc, char *argv[]) {
   auto shutdown_event = mail::man->event<bool>(mail::shutdown);
   on_signal(SIGINT, [&force_shutdown, &display_device_deinit_guard, shutdown_event]() {
     BOOST_LOG(info) << "Interrupt handler called"sv;
+    //비활성화 및 제거
+    virtual_display::toggle_virtual_display(false);
 
     auto task = []() {
       BOOST_LOG(fatal) << "10 seconds passed, yet Sunshine's still running: Forcing shutdown"sv;

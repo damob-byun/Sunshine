@@ -5,48 +5,55 @@
 #include "virtual_display.h"
 #include <iostream>
 #include <stdexcept>
+#include <dxgi1_2.h>
 #include <windows.h>
+#include "logging.h"
+#include "platform/windows/misc.h"
 
 namespace virtual_display {
-  bool
-  isMonitorActive() {
-    int monitorCount = 0;
-    BOOL monitorActive = FALSE;
+  
+bool isMonitorActive() {
 
-    auto monitorEnumProc = [](HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) -> BOOL {
-      int *count = reinterpret_cast<int *>(dwData);
-      (*count)++;
+    IDXGIFactory1* pFactory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory))) {
+        std::cerr << "Failed to create DXGIFactory1." << std::endl;
+        return false;
+    }
 
-      // Retrieve monitor information
-      MONITORINFOEX monitorInfo;
-      monitorInfo.cbSize = sizeof(MONITORINFOEX);
-      if (GetMonitorInfo(hMonitor, &monitorInfo)) {
-        std::cout << "Monitor Name: " << monitorInfo.szDevice << std::endl;
-        std::cout << "Monitor Dimensions: "
-                  << "Left: " << monitorInfo.rcMonitor.left << ", "
-                  << "Top: " << monitorInfo.rcMonitor.top << ", "
-                  << "Right: " << monitorInfo.rcMonitor.right << ", "
-                  << "Bottom: " << monitorInfo.rcMonitor.bottom << std::endl;
-
-        if (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) {
-          std::cout << "This is the primary monitor." << std::endl;
+    bool foundActive = false;
+    UINT adapterIndex = 0;
+    IDXGIAdapter1* pAdapter = nullptr;
+    while (pFactory->EnumAdapters1(adapterIndex, &pAdapter) != DXGI_ERROR_NOT_FOUND) {
+        DXGI_ADAPTER_DESC1 adapterDesc;
+        if (SUCCEEDED(pAdapter->GetDesc1(&adapterDesc))) {
+            // platf::to_utf8로 변환 후 비교
+            std::string desc_utf8 = platf::to_utf8(adapterDesc.Description);
+            BOOST_LOG(info) << "VDD: Adapter " << adapterIndex << ": " << desc_utf8;
+            if (desc_utf8.find("Microsoft Basic Render Driver") != std::string::npos) {
+                pAdapter->Release();
+                adapterIndex++;
+                continue;
+            }
         }
-      }
 
-      return TRUE;
-    };
-
-    monitorActive = EnumDisplayMonitors(NULL, NULL, monitorEnumProc, reinterpret_cast<LPARAM>(&monitorCount));
-
-    if (monitorActive && monitorCount > 0) {
-      std::cout << "Number of monitors detected: " << monitorCount << std::endl;
-      return true;
+        UINT outputIndex = 0;
+        IDXGIOutput* pOutput = nullptr;
+        while (pAdapter->EnumOutputs(outputIndex, &pOutput) != DXGI_ERROR_NOT_FOUND) {
+            DXGI_OUTPUT_DESC outputDesc;
+            if (SUCCEEDED(pOutput->GetDesc(&outputDesc))) {
+                if (outputDesc.AttachedToDesktop) {
+                    foundActive = true;
+                }
+            }
+            pOutput->Release();
+            outputIndex++;
+        }
+        pAdapter->Release();
+        adapterIndex++;
     }
-    else {
-      std::cout << "No active monitors detected." << std::endl;
-      return false;
-    }
-  }
+    pFactory->Release();
+    return foundActive;
+}
 
   bool
   change_resolution(int width, int height, int refreshRate) {
@@ -63,7 +70,7 @@ namespace virtual_display {
       return true;
     }
     else {
-      std::cerr << "Failed to change resolution. Error code: " << result << std::endl;
+      std::cerr << "VDD: Failed to change resolution. Error code: " << result << std::endl;
       return false;
     }
   }
@@ -73,34 +80,35 @@ namespace virtual_display {
     DEVMODE currentMode = {};
     currentMode.dmSize = sizeof(currentMode);
     if (EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &currentMode)) {
-      std::cout << "Current Resolution: "
+      BOOST_LOG(info) << "\nVDD: Current Resolution: "
                 << currentMode.dmPelsWidth << "x" << currentMode.dmPelsHeight
                 << "@" << currentMode.dmDisplayFrequency << "Hz" << std::endl;
 
       // 현재 해상도가 800x600인지 확인
-      if (currentMode.dmPelsWidth < 1000 && currentMode.dmPelsHeight < 800) {
-        std::cout << "Resolution is 800x600. Changing to 1920x1080 @ 60Hz..." << std::endl;
+      if (currentMode.dmPelsWidth < 1100 && currentMode.dmPelsHeight < 800) {
+
+        BOOST_LOG(info) << "Resolution is 800x600 or 1024x768. Changing to 1920x1080 @ 60Hz..." << std::endl;
 
         // 해상도 변경
         if (change_resolution(1920, 1080, 60)) {
-          std::cout << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
+          BOOST_LOG(info) << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
         }
         else {
           std::cerr << "Resolution change failed." << std::endl;
         }
       }
       else if (currentMode.dmPelsHeight >= 2000) {
-        std::cout << "Resolution is 3840x2160. Changing to 1920x1080 @ 60Hz..." << std::endl;
+        BOOST_LOG(info) << "Resolution is 3840x2160. Changing to 1920x1080 @ 60Hz..." << std::endl;
         // 해상도 변경
         if (change_resolution(1920, 1080, 60)) {
-          std::cout << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
+          BOOST_LOG(info) << "Resolution changed to 1920x1080 @ 60Hz successfully." << std::endl;
         }
         else {
           std::cerr << "Resolution change failed." << std::endl;
         }
       }
       else {
-        std::cout << "Resolution is not 800x600. No changes required." << std::endl;
+        BOOST_LOG(info) << "Resolution is not 800x600. No changes required." << std::endl;
       }
     }
     else {
@@ -155,22 +163,27 @@ namespace virtual_display {
   }
   bool
   toggle_virtual_display(bool enable) {
-    if (displays.size() > 0) {
+    if (displays.size() > 0 && !enable) {
       int index = displays.back();
       vdd_remove_display(global_vdd, index);
       displays.pop_back();
-      printf("Removed the last virtual display, index: %d.\n", index);
+      BOOST_LOG(warning) << "VDD: Removed the last virtual display, index: " << index;
+
       return true;
     }
+    if(displays.size() > 0  && enable) {
+      BOOST_LOG(warning) << "VDD: Already one added, cannot add more.";
+      return false;
+    }
     else {
-      if (displays.size() < VDD_MAX_DISPLAYS) {
+      if (displays.size() < VDD_MAX_DISPLAYS && enable) {
         int index = vdd_add_display(global_vdd);
         if (index != -1) {
           displays.push_back(index);
-          printf("Added a new virtual display, index: %d.\n", index);
+          BOOST_LOG(warning) <<  "VDD: Added a new virtual display, index: " <<  index;
         }
         else {
-          printf("Add virtual display failed.");
+          BOOST_LOG(warning) << "VDD: Add virtual display failed.";
         }
         return true;
       }
@@ -183,18 +196,19 @@ namespace virtual_display {
   exist_virtual_display() {
     if(global_vdd != NULL && global_vdd != INVALID_HANDLE_VALUE) {
       // Check if the device is still OK.
+      BOOST_LOG(warning) << "VDD: VDD device already exists, no need to reinitialize.";
       return true;
     }
     DeviceStatus status = query_device_status(&VDD_CLASS_GUID, VDD_HARDWARE_ID);
     if (status != DEVICE_OK) {
-      printf("Parsec VDD device is not OK, got status %d.\n", status);
+      BOOST_LOG(warning) << "VDD: VDD device is not OK, got status "  << status;
       return false;
     }
 
     // Obtain device handle.
     global_vdd = open_device_handle(&VDD_ADAPTER_GUID);
     if (global_vdd == NULL || global_vdd == INVALID_HANDLE_VALUE) {
-      printf("Failed to obtain the device handle.\n");
+      BOOST_LOG(warning) << "VDD: Failed to obtain the device handle " ;
       return false;
     }
     return true;
