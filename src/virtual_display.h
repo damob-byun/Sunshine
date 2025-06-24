@@ -6,7 +6,8 @@
 
 #include <string>
 #include <vector>
-
+#include <thread>
+#include <atomic>
 
 #include <windows.h>
 
@@ -105,6 +106,7 @@ namespace virtual_display {
   DWORD
   vdd_io_control(HANDLE vdd, VddCtlCode code, const void *data, size_t size);
      
-  static std::vector<int> displays;
-  static HANDLE global_vdd = NULL;  // Global VDD handle, should be closed by close_device_handle after use.
+  extern HANDLE global_vdd;
+    extern std::atomic<bool> vdd_update_running;
+    extern std::thread vdd_update_worker;
 }  // namespace virtual_display

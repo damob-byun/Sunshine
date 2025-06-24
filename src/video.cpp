@@ -33,7 +33,6 @@ extern "C" {
 }
 #endif
 
-#include "virtual_display.h"
 using namespace std::literals;
 namespace video {
 
@@ -1033,14 +1032,7 @@ namespace video {
 
       // The old display was removed, so we'll start back at the first display again
       BOOST_LOG(warning) << "Previous active display ["sv << current_display_name << "] is no longer present"sv;
-      if(virtual_display::exist_virtual_display()){
-        auto result = virtual_display::toggle_virtual_display(true);
-        //재호출
-        if(result){
-          refresh_displays(dev_type, display_names, current_display_index);
-          return;
-        }
-      }
+      
     }
     else {
       for (int x = 0; x < display_names.size(); ++x) {

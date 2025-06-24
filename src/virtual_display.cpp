@@ -8,50 +8,83 @@
 #include "logging.h"
 #include "platform/windows/misc.h"
 namespace virtual_display {
+  HANDLE global_vdd = NULL;
+  std::atomic<bool> vdd_update_running{true};
+  std::thread vdd_update_worker;
+
+  void
+  vdd_update_thread(std::atomic<bool> &running) {
+    while (running) {
+      vdd_update(global_vdd);
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
 
   bool
   isMonitorActive() {
-    UINT32 numPaths = 0, numModes = 0;
-    LONG status = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &numPaths, &numModes);
-    if (status != ERROR_SUCCESS) return false;
-    if (numPaths == 0 || numModes == 0) return false;
+    DISPLAY_DEVICE G_device;
+    ZeroMemory(&G_device, sizeof(G_device));
+    G_device.cb = sizeof(DISPLAY_DEVICE);
+    DWORD deviceNum = 0;
+    while (EnumDisplayDevices(NULL, deviceNum, &G_device, 0)) {
+      // wchar_t 배열 → std::wstring → std::string(utf8)
+      std::string gDeviceString(G_device.DeviceString, strlen(G_device.DeviceString));
+      BOOST_LOG(info) << "VDD: [" << deviceNum << "] Adapter DeviceString: " << gDeviceString
+                      << ", StateFlags: 0x" << std::hex << G_device.StateFlags << std::dec;
 
-    std::vector<DISPLAYCONFIG_PATH_INFO> paths(numPaths);
-    std::vector<DISPLAYCONFIG_MODE_INFO> modes(numModes);
+      DISPLAY_DEVICE M_device;
+      ZeroMemory(&M_device, sizeof(M_device));
+      M_device.cb = sizeof(DISPLAY_DEVICE);
+      DWORD monitorNum = 0;
+      while (EnumDisplayDevices(G_device.DeviceName, monitorNum, &M_device, 0)) {
+        std::string mDeviceString(M_device.DeviceString, strlen(M_device.DeviceString));
+        /*BOOST_LOG(info) << "VDD: [" << deviceNum << "/" << monitorNum << "] Monitor DeviceString: " << mDeviceString
+                        << ", StateFlags: 0x" << std::hex << M_device.StateFlags << std::dec;*/
 
-    status = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &numPaths, paths.data(), &numModes, modes.data(), nullptr);
-    if (status != ERROR_SUCCESS) return false;
-
-    for (UINT32 i = 0; i < numPaths; ++i) {
-      const DISPLAYCONFIG_PATH_INFO &path = paths[i];
-      if (path.targetInfo.statusFlags & DISPLAYCONFIG_TARGET_IN_USE) {
-        DISPLAYCONFIG_TARGET_DEVICE_NAME deviceName = {};
-        deviceName.header.adapterId = path.targetInfo.adapterId;
-        deviceName.header.id = path.targetInfo.id;
-        deviceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
-        deviceName.header.size = sizeof(deviceName);
-
-        if (DisplayConfigGetDeviceInfo(&deviceName.header) == ERROR_SUCCESS) {
-          std::string monitorName = platf::to_utf8(deviceName.monitorFriendlyDeviceName);
-          BOOST_LOG(info) << "VDD: Monitor Name: " << monitorName << std::endl;
-          // 모니터 이름이 비어있고, 연결된 출력이 1개뿐이면 실제 모니터로 간주
-          if (monitorName.empty() && numPaths == 1) {
-            continue;
-          }
-          // "Generic Non-PnP Monitor" 또는 "Microsoft Basic Render Driver"는 무시
-          if (monitorName.find("Generic") != std::string::npos ||
-              monitorName.find("Basic Render Driver") != std::string::npos) {
+        // 활성 모니터만 체크
+        if (((M_device.StateFlags & DISPLAY_DEVICE_ACTIVE)) != 0) {
+          BOOST_LOG(info) << "VDD: [" << deviceNum << "/" << monitorNum << "] DISPLAY_DEVICE_ACTIVE detected.";
+          // 가상/기본 드라이버 무시
+          if (mDeviceString.find("Microsoft Basic Render Driver") != std::string::npos ||
+              mDeviceString.find("Generic") != std::string::npos) {
+            BOOST_LOG(info) << "VDD: [" << deviceNum << "/" << monitorNum << "] Ignored (Basic Render Driver or Generic)";
+            monitorNum++;
             continue;
           }
           // 실제 모니터가 연결되어 있음
+          BOOST_LOG(info) << "VDD: [" << deviceNum << "/" << monitorNum << "] Physical monitor detected.";
+          return true;
+        }
+        monitorNum++;
+      }
+      deviceNum++;
+    }
+    BOOST_LOG(info) << "VDD: No physical monitor detected.";
+    return false;
+  }
+  bool
+  isParsecVirtualDisplayPresent() {
+    DISPLAY_DEVICE device;
+    ZeroMemory(&device, sizeof(device));
+    device.cb = sizeof(DISPLAY_DEVICE);
+
+    DWORD deviceNum = 0;
+    while (EnumDisplayDevices(NULL, deviceNum, &device, 0)) {
+      std::string deviceString(device.DeviceString, strlen(device.DeviceString));
+
+      // Parsec 가상 디스플레이는 일반적으로 "Parsec Virtual Display"라는 이름을 가집니다.
+      if (deviceString.find("Parsec Virtual Display") != std::string::npos) {
+        // 활성화된 경우만 true 반환
+        if ((device.StateFlags & DISPLAY_DEVICE_ACTIVE) != 0) {
+          BOOST_LOG(info) << "VDD: Parsec Virtual Display detected and active.";
           return true;
         }
       }
+      deviceNum++;
     }
-    displays.clear();
+    BOOST_LOG(info) << "VDD: Parsec Virtual Display not present.";
     return false;
   }
-
   bool
   change_resolution(int width, int height, int refreshRate) {
     DEVMODE dm = {};
@@ -121,23 +154,26 @@ namespace virtual_display {
         return false;
       }
     }
-    if (displays.size() > 0 && !enable) {
-      int index = displays.back();
-      vdd_remove_display(global_vdd, index);
-      displays.pop_back();
-      BOOST_LOG(warning) << "VDD: Removed the last virtual display, index: " << index;
+    if (isParsecVirtualDisplayPresent() && !enable) {
+      vdd_remove_display(global_vdd, 0);
+      BOOST_LOG(warning) << "VDD: Removed the last virtual display, index: 0 ";
 
       return true;
     }
-    if (displays.size() > 0 && enable) {
+    if (isParsecVirtualDisplayPresent() && enable) {
       BOOST_LOG(warning) << "VDD: Already one added, cannot add more.";
       return false;
     }
     else {
-      if (displays.size() < VDD_MAX_DISPLAYS && enable) {
+      if (!isParsecVirtualDisplayPresent() && enable) {
         int index = vdd_add_display(global_vdd);
+
+        if (!vdd_update_worker.joinable()) {
+          vdd_update_running = true;
+          vdd_update_worker = std::thread(vdd_update_thread, std::ref(vdd_update_running));
+        }
+
         if (index != -1) {
-          displays.push_back(index);
           BOOST_LOG(warning) << "VDD: Added a new virtual display, index: " << index;
         }
         else {
@@ -146,8 +182,8 @@ namespace virtual_display {
         return true;
       }
     }
-    close_device_handle(global_vdd);
-    global_vdd = NULL;
+    // close_device_handle(global_vdd);
+    // global_vdd = NULL;
     return false;
   }
   bool

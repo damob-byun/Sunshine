@@ -134,6 +134,14 @@ main(int argc, char *argv[]) {
   // Log publisher metadata
   log_publisher_data();
 
+#ifdef WIN32
+  if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
+      virtual_display::toggle_virtual_display(true);
+    }else{
+      virtual_display::check_resolution();
+    }
+#endif
+
   if (!config::sunshine.cmd.name.empty()) {
     auto fn = cmd_to_func.find(config::sunshine.cmd.name);
     if (fn == std::end(cmd_to_func)) {

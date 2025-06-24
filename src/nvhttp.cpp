@@ -545,7 +545,7 @@ namespace nvhttp {
     for (auto &[name, val] : request->header) {
       BOOST_LOG(debug) << name << " -- " << val;
     }
-
+ 
     BOOST_LOG(debug) << " [--] "sv;
 
     for (auto &[name, val] : request->parse_query_string()) {

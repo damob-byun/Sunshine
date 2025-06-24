@@ -656,7 +656,7 @@ namespace platf::dxgi {
     adapter->GetDesc(&adapter_desc);
 
     auto description = to_utf8(adapter_desc.Description);
-    BOOST_LOG(info)
+    BOOST_LOG(debug)
       << std::endl
       << "Device Description : " << description << std::endl
       << "Device Vendor ID   : 0x"sv << util::hex(adapter_desc.VendorId).to_string_view() << std::endl
@@ -1150,7 +1150,7 @@ namespace platf {
         auto width = desc.DesktopCoordinates.right - desc.DesktopCoordinates.left;
         auto height = desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top;
 
-        BOOST_LOG(debug)
+        BOOST_LOG(info)
           << "    Output Name       : "sv << device_name << std::endl
           << "    AttachedToDesktop : "sv << (desc.AttachedToDesktop ? "yes"sv : "no"sv) << std::endl
           << "    Resolution        : "sv << width << 'x' << height << std::endl
