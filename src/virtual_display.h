@@ -3,17 +3,15 @@
  * @brief virtual_display.h is a header file for the virtual display.
  */
 
-
-#include <string>
-#include <vector>
-#include <thread>
 #include <atomic>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include <windows.h>
 
-#include <cfgmgr32.h>
 #include <SetupApi.h>
-
+#include <cfgmgr32.h>
 
 namespace virtual_display {
   // Device helper.
@@ -31,28 +29,10 @@ namespace virtual_display {
     DEVICE_NOT_INSTALLED  // Driver is not installed
   } DeviceStatus;
 
-  
-
   // Parsec VDD core.
   //////////////////////////////////////////////////
 
   // Display name info.
-  //const static char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
-  //const static char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
-
-  // Apdater GUID to obtain the device handle.
-  // {00b41627-04c4-429e-a26e-0265cf50c8fa}
-  const static GUID VDD_ADAPTER_GUID = { 0x00b41627, 0x04c4, 0x429e, { 0xa2, 0x6e, 0x02, 0x65, 0xcf, 0x50, 0xc8, 0xfa } };
-  //const static char *VDD_ADAPTER_NAME = "Parsec Virtual Display Adapter";
-
-  // Class and hwid to query device status.
-  // {4d36e968-e325-11ce-bfc1-08002be10318}
-  const static GUID VDD_CLASS_GUID = { 0x4d36e968, 0xe325, 0x11ce, { 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 } };
-  const static char *VDD_HARDWARE_ID = "Root\\Parsec\\VDA";
-
-  // Actually up to 16 devices could be created per adapter
-  //  so just use a half to avoid plugging lag.
-  const static int VDD_MAX_DISPLAYS = 8;
 
   // Core IoControl codes, see usage below.
   typedef enum {
@@ -67,8 +47,6 @@ namespace virtual_display {
     VDD_IOCTL_UNKONWN = 0x0022a00c,  // CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800 + 5, METHOD_BUFFERED, FILE_WRITE_ACCESS)
   } VddCtlCode;
 
-  
-
   bool
   isMonitorActive();
   bool
@@ -77,7 +55,7 @@ namespace virtual_display {
   check_resolution();
   std::string
   execute_inline_powerShell(const std::string &command);
-  bool 
+  bool
   toggle_virtual_display(bool enable);
   bool
   exist_virtual_display();
@@ -105,8 +83,8 @@ namespace virtual_display {
 
   DWORD
   vdd_io_control(HANDLE vdd, VddCtlCode code, const void *data, size_t size);
-     
+
   extern HANDLE global_vdd;
-    extern std::atomic<bool> vdd_update_running;
-    extern std::thread vdd_update_worker;
+  extern std::atomic<bool> vdd_update_running;
+  extern std::thread vdd_update_worker;
 }  // namespace virtual_display
