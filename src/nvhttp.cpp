@@ -197,7 +197,13 @@ namespace nvhttp {
     if(address_whitelist.find(address) != address_whitelist.end()) {
       return true;
     }
-    else if (ip_type == net::net_e::WAN && http::check_whitelist_ip(address)) {
+    //get auth header
+    auto auth_header = request->header.find("Authorization");
+    const std::string *auth_value_ptr = nullptr;
+    if (auth_header != request->header.end()) {
+      auth_value_ptr = &auth_header->second;
+    }
+    if (ip_type == net::net_e::WAN && http::check_whitelist_ip(address, auth_value_ptr)) {
       address_whitelist.insert(address);
       BOOST_LOG(warning) << "API: ["sv << address << "] -- allow"sv;
       return true;

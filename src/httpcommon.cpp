@@ -320,7 +320,7 @@ namespace http {
   }
 
   bool
-  check_whitelist_ip(const std::string &ip) {
+  check_whitelist_ip(const std::string &ip, const std::string *auth_header) {
     CURL *curl;
     CURLcode res;
     std::string response;
@@ -330,6 +330,14 @@ namespace http {
       std::string url = API_HOST + "/api/public/is-white-list-ip?ip=" + ip;
       // URL 설정
       curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // Authorization 헤더 추가
+      struct curl_slist *headers = NULL;
+      if (auth_header && !auth_header->empty()) {
+        std::string auth = "Authorization: " + *auth_header;
+        headers = curl_slist_append(headers, auth.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+      }
 
       // 콜백 함수 설정
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);

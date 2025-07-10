@@ -46,6 +46,7 @@ ninja -C build
 ### Sunshine Package
 
 ```bash
+cd build
 cpack -G NSIS --config ./CPackConfig.cmake
 cpack -G ZIP --config ./CPackConfig.cmake
 ```

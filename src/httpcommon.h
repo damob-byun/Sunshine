@@ -31,7 +31,7 @@ namespace http {
   std::vector<std::string>
   get_available_ips();
   bool
-  check_whitelist_ip(const std::string& ip);
+  check_whitelist_ip(const std::string& ip, const std::string *auth_header = nullptr);
 
   std::string
   get_public_ip();
