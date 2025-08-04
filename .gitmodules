@@ -70,4 +70,7 @@
 	path = updater/minizip-ng
 	url = https://github.com/zlib-ng/minizip-ng.git
 	branch = master
-
+[submodule "third-party/jwt-cpp"]
+	path = updater/jwt-cpp
+	url = https://github.com/Thalhammer/jwt-cpp.git
+	branch = master

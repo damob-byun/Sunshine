@@ -155,4 +155,5 @@ list(APPEND SUNSHINE_EXTERNAL_LIBRARIES
         ${FFMPEG_LIBRARIES}
         ${Boost_LIBRARIES}
         ${OPENSSL_LIBRARIES}
+        jwt-cpp::jwt-cpp
         ${PLATFORM_LIBRARIES})
