@@ -31,6 +31,7 @@
 #include "file_handler.h"
 #include "globals.h"
 #include "httpcommon.h"
+
 #include "logging.h"
 #include "network.h"
 #include "nvhttp.h"
@@ -40,6 +41,7 @@
 #include "uuid.h"
 #include "version.h"
 #include <cstdlib>
+#include <jwt-cpp/jwt.h>
 #include <regex>
 
 using namespace std::literals;
@@ -58,6 +60,17 @@ namespace confighttp {
     ADD,  ///< Add client
     REMOVE  ///< Remove client
   };
+
+  std::string PUBLIC_KEY =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtKMrJkjENQIL9oPc3CRP\n"
+    "deRpHNInR+cS4PKDGGOcLFnpi+MTRBVW/aNoIqV/yFnQroxfDez6VCQ6eN+kMiOU\n"
+    "hwmPZ0oR15W5V0rvR/BLc6jcxU5er5upHgPM+aR6Nzrx2shZ5IB9LKIavZ+jMZ0O\n"
+    "Iya4WGOP6QLMODfuDZ330GWGwarz4USP0N/NpV0rY2w38j6isHVOzoXX7ARvPkIj\n"
+    "Waj/7uy4ZvijkI4SxsL7Vt0KVYB/zzDpEgdmPA0oRz8mhUZIGCua5GghUrx3579O\n"
+    "1s46ERWav8VKbAJYViaU8W1MgRLw2uol5OfXnmC2+QVRAthz8mnzeA4GXzWOHxIn\n"
+    "PQIDAQAB\n"
+    "-----END PUBLIC KEY-----\n";
 
   void
   print_req(const req_https_t &request) {
@@ -110,23 +123,6 @@ namespace confighttp {
 
   bool
   authenticate(resp_https_t response, req_https_t request) {
-    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
-    auto ip_type = net::from_address(address);
-    if (available_ips.empty()) {
-      available_ips = http::get_available_ips();
-      for (const auto &line : available_ips) {
-        BOOST_LOG(info) << "available ip - " << line << std::endl;
-      }
-    }
-    if (ip_type == net::net_e::WAN && check_ip_in_response(available_ips, address)) {
-      BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- allow"sv;
-    }
-    else if (ip_type > http::origin_web_ui_allowed) {
-      BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- denied"sv;
-      response->write(SimpleWeb::StatusCode::client_error_forbidden);
-      return false;
-    }
-
     // If credentials are shown, redirect the user to a /welcome page
     if (config::sunshine.username.empty()) {
       send_redirect(response, request, "/welcome");
@@ -137,12 +133,49 @@ namespace confighttp {
       send_unauthorized(response, request);
     });
 
+    auto auth2 = request->header.find("authorization2");
+    if (auth2 != request->header.end()) {
+      BOOST_LOG(warning) << "Web UI: authorization2"sv;
+      auto &rawAuth2 = auth2->second;
+
+      if (boost::istarts_with(rawAuth2, "Bearer ")) {
+        std::string jwt_token = rawAuth2.substr(strlen("Bearer "));
+        try {
+          // 헤더에 정의된 PUBLIC_KEY 변수 사용
+          BOOST_LOG(warning) << "Web UI jwt_token: ["sv << jwt_token << "] --"sv;
+          auto decoded = jwt::decode(jwt_token);
+          
+          auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs256(confighttp::PUBLIC_KEY, "", "", ""))
+                            .with_issuer("sunshine");
+          verifier.verify(decoded);
+
+          // 검증 성공 시 인증 통과
+          fg.disable();
+          return true;
+        }
+        catch (const std::exception &e) {
+          BOOST_LOG(warning) << "JWT verification failed: " << e.what();
+          return false;
+        }
+      }
+    }
+
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
+    auto ip_type = net::from_address(address);
+
     auto auth = request->header.find("authorization");
     if (auth == request->header.end()) {
       return false;
     }
 
     auto &rawAuth = auth->second;
+
+    if (ip_type != net::net_e::PC) {
+      BOOST_LOG(warning) << "Web UI: ["sv << address << "] -- denied"sv;
+      response->write(SimpleWeb::StatusCode::client_error_forbidden);
+      return false;
+    }
     auto authData = SimpleWeb::Crypto::Base64::decode(rawAuth.substr("Basic "sv.length()));
 
     int index = authData.find(':');
@@ -737,16 +770,14 @@ namespace confighttp {
     print_req(request);
     BOOST_LOG(warning) << "Restart Computer Command: "sv;
 
-    
 #ifdef WIN32
-system("shutdown /r /t 0");
+    system("shutdown /r /t 0");
 #else
-system("shutdown -r now");
+    system("shutdown -r now");
 #endif
 
     // We may not return from this call
     platf::restart();
-
   }
 
   /**
@@ -988,10 +1019,7 @@ system("shutdown -r now");
     auto port_https = net::map_port(PORT_HTTPS);
     auto address_family = net::af_from_enum_string(config::sunshine.address_family);
 
-    confighttp::available_ips = http::get_available_ips();
-    for (const auto &line : available_ips) {
-      BOOST_LOG(info) << "available ip - " << line << std::endl;
-    }
+   
 
     if (config::sunshine.username.empty()) {
       std::string newUsername = "sunshine2";

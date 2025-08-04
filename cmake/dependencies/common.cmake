@@ -16,6 +16,8 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/third-party/Simple-Web-Server")
 add_subdirectory("${CMAKE_SOURCE_DIR}/third-party/libdisplaydevice")
 
 # jwt-cpp
+set(JWT_BUILD_TESTS OFF CACHE BOOL "Disable jwt-cpp tests")
+set(JWT_EXTERNAL_NLOHMANN_JSON ON CACHE BOOL "Use external nlohmann_json")
 add_subdirectory("${CMAKE_SOURCE_DIR}/third-party/jwt-cpp")
 
 # common dependencies
