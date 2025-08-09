@@ -87,5 +87,6 @@ namespace virtual_display {
   extern HANDLE global_vdd;
   extern std::atomic<bool> vdd_update_running;
   extern std::thread vdd_update_worker;
+  extern bool hidden_done;
 
 }  // namespace virtual_display

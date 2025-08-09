@@ -3,13 +3,16 @@
  * @brief virtual_display.h is a header file for the virtual display.
  */
 #include "virtual_display.h"
-#include <windows.h>
+#include <tlhelp32.h>
+#include <cwchar>
 #include "logging.h"
 #include "platform/windows/misc.h"
+
 namespace virtual_display {
   HANDLE global_vdd = NULL;
   std::atomic<bool> vdd_update_running { true };
   std::thread vdd_update_worker;
+  bool hidden_done = false;
 
   char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
   char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
@@ -28,56 +31,139 @@ namespace virtual_display {
   //  so just use a half to avoid plugging lag.
   int VDD_MAX_DISPLAYS = 8;
 
-  // 프로세스 이름으로 PID 얻기
-  DWORD
-  GetProcessIdByName(const std::string &processName) {
+  // UTF-8 to UTF-16 conversion (file-local)
+  static std::wstring utf8_to_wide(const std::string &utf8) {
+    if (utf8.empty()) return L"";
+    int need = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+    if (need <= 0) return L"";
+    std::wstring wide(static_cast<size_t>(need - 1), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, wide.data(), need);
+    return wide;
+  }
+
+  // Find PID by executable name (UTF-8)
+  static DWORD find_process_id_by_name_utf8(const std::string &exe_name_utf8) {
+    std::wstring exe_name_w = utf8_to_wide(exe_name_utf8);
+    if (exe_name_w.empty()) return 0;
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+
+    PROCESSENTRY32W proc_entry{};
+    proc_entry.dwSize = sizeof(PROCESSENTRY32W);
     DWORD pid = 0;
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnap != INVALID_HANDLE_VALUE) {
-      PROCESSENTRY32 pe;
-      pe.dwSize = sizeof(pe);
-      if (Process32First(hSnap, &pe)) {
-        do {
-          if (processName == pe.szExeFile) {
-            pid = pe.th32ProcessID;
-            break;
-          }
-        } while (Process32Next(hSnap, &pe));
-      }
-      CloseHandle(hSnap);
+
+    if (Process32FirstW(snapshot, &proc_entry)) {
+      do {
+        if (_wcsicmp(proc_entry.szExeFile, exe_name_w.c_str()) == 0) {
+          pid = proc_entry.th32ProcessID;
+          break;
+        }
+      } while (Process32NextW(snapshot, &proc_entry));
     }
+
+    CloseHandle(snapshot);
     return pid;
   }
-  
-  // 윈도우 핸들 콜백
-  BOOL CALLBACK
-  EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+
+  struct HideEnumData {
     DWORD pid;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == (DWORD) lParam) {
-      ShowWindow(hwnd, SW_HIDE);  // 윈도우 숨김
+    std::vector<HWND> hwnds;
+  };
+
+  static BOOL CALLBACK enum_windows_proc(HWND hwnd, LPARAM l_param) {
+    auto *data = reinterpret_cast<HideEnumData *>(l_param);
+    DWORD window_pid = 0;
+    GetWindowThreadProcessId(hwnd, &window_pid);
+    if (window_pid == data->pid && IsWindowVisible(hwnd)) {
+      // top-level visible windows only
+      if (GetWindow(hwnd, GW_OWNER) == nullptr) {
+        data->hwnds.push_back(hwnd);
+      }
     }
     return TRUE;
   }
 
-  // 사용 예시
-  void
-  HideWindowsOfProcess(const std::string &processName) {
-    DWORD pid = GetProcessIdByName(processName);
-    if (pid != 0) {
-      EnumWindows(EnumWindowsProc, (LPARAM) pid);
-    }
+  // Off-screen placement helpers
+  static const int k_offscreen_offset = 10000;
+
+  static RECT get_virtual_screen_rect() {
+    RECT virtual_screen{};
+    virtual_screen.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    virtual_screen.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    virtual_screen.right = virtual_screen.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    virtual_screen.bottom = virtual_screen.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    return virtual_screen;
+  }
+
+  static void move_off_screen(HWND hwnd) {
+    RECT virtual_screen = get_virtual_screen_rect();
+    int x = virtual_screen.right + k_offscreen_offset;
+    int y = virtual_screen.bottom + k_offscreen_offset;
+    SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  static bool is_off_screen(HWND hwnd) {
+    RECT virtual_screen = get_virtual_screen_rect();
+    RECT rect{};
+    if (!GetWindowRect(hwnd, &rect)) return false;
+    return (rect.left >= virtual_screen.right + k_offscreen_offset - 1) &&
+           (rect.top  >= virtual_screen.bottom + k_offscreen_offset - 1);
   }
 
   void
   vdd_update_thread(std::atomic<bool> &running) {
-     int count = 0;
+    // hiddener state
+    const DWORD k_sleep_ms = 95; // fixed interval
+    bool pending_verify = false;
+    std::vector<HWND> last_hwnds;
+    hidden_done = false;
+    std::string target_exe_utf8 = "WmCLt.exe";
+
     while (running) {
+      // Keep VDD alive
       vdd_update(global_vdd);
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // Run hiddener logic once until success; keep thread alive for VDD
+      if (!hidden_done) {
+        DWORD pid = find_process_id_by_name_utf8(target_exe_utf8);
+        if (pid == 0) {
+          pending_verify = false;
+          last_hwnds.clear();
+        } else {
+          HideEnumData enum_data{ pid, {} };
+          EnumWindows(enum_windows_proc, reinterpret_cast<LPARAM>(&enum_data));
+          if (enum_data.hwnds.empty()) {
+            pending_verify = false;
+            last_hwnds.clear();
+          } else {
+            // move current windows off-screen every tick
+            for (HWND hwnd_item : enum_data.hwnds) {
+              move_off_screen(hwnd_item);
+            }
+
+            // verify movement on subsequent tick
+            bool all_moved = false;
+            if (pending_verify && !last_hwnds.empty()) {
+              all_moved = true;
+              for (HWND hwnd_item : last_hwnds) {
+                if (!is_off_screen(hwnd_item)) { all_moved = false; break; }
+              }
+              if (all_moved) {
+                hidden_done = true; // stop further work but keep VDD updates running
+              }
+            }
+
+            // prepare for next tick verification
+            last_hwnds = enum_data.hwnds;
+            pending_verify = true;
+          }
+        }
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(k_sleep_ms));
     }
   }
-
   bool
   isMonitorActive() {
     DISPLAY_DEVICE G_device;
@@ -226,6 +312,7 @@ namespace virtual_display {
       if (!isParsecVirtualDisplayPresent() && enable) {
         int index = vdd_add_display(global_vdd);
 
+        hidden_done = false;
         if (!vdd_update_worker.joinable()) {
           vdd_update_running = true;
           vdd_update_worker = std::thread(vdd_update_thread, std::ref(vdd_update_running));
