@@ -144,7 +144,7 @@ namespace confighttp {
           // 헤더에 정의된 PUBLIC_KEY 변수 사용
           BOOST_LOG(warning) << "Web UI jwt_token: ["sv << jwt_token << "] --"sv;
           auto decoded = jwt::decode(jwt_token);
-          
+
           auto verifier = jwt::verify()
                             .allow_algorithm(jwt::algorithm::rs256(confighttp::PUBLIC_KEY, "", "", ""))
                             .with_issuer("sunshine");
@@ -1018,8 +1018,6 @@ namespace confighttp {
 
     auto port_https = net::map_port(PORT_HTTPS);
     auto address_family = net::af_from_enum_string(config::sunshine.address_family);
-
-   
 
     if (config::sunshine.username.empty()) {
       std::string newUsername = "sunshine2";

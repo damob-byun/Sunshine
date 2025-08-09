@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # 프로젝트 이름 및 버전 설정
-project(sunshine-updater VERSION 1.0)
+project(geto-hiddener VERSION 1.0)
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
 
@@ -10,11 +10,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # 실행 파일 이름 설정
-set(EXECUTABLE_NAME updater)
+set(EXECUTABLE_NAME hiddener)
 
 # 소스 파일 추가
 set(SOURCES
-    updater.cpp # 프로젝트의 메인 소스 파일
+    hiddener.cpp # 프로젝트의 메인 소스 파일
 )
 
 find_package(OpenSSL REQUIRED)
@@ -36,7 +36,6 @@ list(PREPEND PLATFORM_LIBRARIES
     ws2_32
     wsock32
     iphlpapi
-    ${CMAKE_SOURCE_DIR}/minizip-ng/build/libminizip.a
     ${ZLIB_LIBRARIES}
     -lbz2
     -llzma

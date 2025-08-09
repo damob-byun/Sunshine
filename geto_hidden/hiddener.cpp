@@ -1,7 +1,4 @@
-#include "minizip-ng/mz.h"
-#include "minizip-ng/mz_strm.h"
-#include "minizip-ng/mz_zip.h"
-#include "minizip-ng/mz_zip_rw.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -216,53 +213,6 @@ download_file(const std::string &url, const std::string &file) {
   return result == CURLE_OK;
 }
 
-std::string
-calculate_sha256(const std::string &filePath) {
-  std::ifstream file(filePath, std::ios::binary);
-  if (!file.is_open()) {
-    std::cerr << "Failed to open file for SHA256 calculation: " << filePath << std::endl;
-    return "";
-  }
-
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-
-  char buffer[8192];
-  while (file.good()) {
-    file.read(buffer, sizeof(buffer));
-    SHA256_Update(&sha256, buffer, file.gcount());
-  }
-
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256_Final(hash, &sha256);
-
-  std::ostringstream oss;
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
-    oss << std::hex << std::setw(2) << std::setfill('0') << (int) hash[i];
-  }
-
-  return oss.str();
-}
-
-bool
-extract_zip_with_powerShell(const std::string &zipPath, const std::string &outputPath) {
-  // PowerShell 명령 생성
-  std::string command = "powershell -Command \"Expand-Archive -LiteralPath '" + zipPath + "' -DestinationPath '" + outputPath + "' -Force\"";
-
-  // PowerShell 명령 실행
-  int result = std::system(command.c_str());
-
-  // 결과 확인
-  if (result == 0) {
-    std::cout << "Successfully extracted ZIP file to: " << outputPath << std::endl;
-    return true;
-  }
-  else {
-    std::cerr << "Failed to extract ZIP file. PowerShell returned code: " << result << std::endl;
-    return false;
-  }
-}
-
 // 프로그램 교체 함수
 bool
 replace_file(const std::string &oldFilePath, const std::string &newFilePath) {
@@ -355,92 +305,6 @@ replace_all(const std::string &source_dir, const std::string &dest_dir) {
   FindClose(hFind);
   return true;
 }
-void
-relaunch_program(const std::string &programPath) {
-#ifdef _WIN32
-  // Windows에서 프로그램 재실행
-  STARTUPINFO si = { sizeof(STARTUPINFO) };
-  PROCESS_INFORMATION pi;
-  if (!CreateProcess(NULL, const_cast<char *>(programPath.c_str()), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-    std::cerr << "Failed to relaunch program. Error: " << GetLastError() << std::endl;
-  }
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
-#else
-  // Unix-like 시스템에서 프로그램 재실행
-  if (fork() == 0) {
-    execl(programPath.c_str(), programPath.c_str(), NULL);
-    std::cerr << "Failed to relaunch program." << std::endl;
-    exit(EXIT_FAILURE);
-  }
-#endif
-}
-
-void
-ensure_directory_exists(const std::string &file_path) {
-  size_t pos = file_path.find_last_of("\\");
-  if (pos != std::string::npos) {
-    std::string directory = file_path.substr(0, pos);
-    create_directory_if_not_exists(directory);
-  }
-}
-
-bool
-extract_zip(const std::string &zip_file_path, const std::string &output_folder) {
-  std::string final_output_path = fix_path_for_windows(output_folder);
-
-  if (!create_directory_if_not_exists(final_output_path)) {
-    return false;
-  }
-
-  void *zip_reader = mz_zip_reader_create();
-  if (mz_zip_reader_open_file(zip_reader, zip_file_path.c_str()) != MZ_OK) {
-    std::cerr << "Failed to open ZIP file: " << zip_file_path << std::endl;
-    mz_zip_reader_delete(&zip_reader);
-    return false;
-  }
-
-  mz_zip_file *file_info = nullptr;
-  while (mz_zip_reader_goto_next_entry(zip_reader) == MZ_OK) {
-    mz_zip_reader_entry_get_info(zip_reader, &file_info);
-    std::string filename = fix_path_for_windows(file_info->filename);
-    std::string full_path = final_output_path + "\\" + filename;
-
-    // std::cout << "Extracting: " << full_path << std::endl;
-
-    if (filename.back() == '\\') {
-      create_directory_if_not_exists(full_path);
-      continue;
-    }
-
-    if (mz_zip_reader_entry_open(zip_reader) != MZ_OK) {
-      std::cerr << "Failed to open file inside ZIP archive." << std::endl;
-      continue;
-    }
-
-    ensure_directory_exists(full_path);
-    std::ofstream out_file(full_path, std::ios::binary);
-    if (!out_file) {
-      std::cerr << "Failed to create output file: " << full_path << std::endl;
-      mz_zip_reader_entry_close(zip_reader);
-      continue;
-    }
-
-    std::vector<char> buffer(8192);
-    int32_t bytes_read;
-    while ((bytes_read = mz_zip_reader_entry_read(zip_reader, buffer.data(), buffer.size())) > 0) {
-      out_file.write(buffer.data(), bytes_read);
-    }
-
-    out_file.close();
-    mz_zip_reader_entry_close(zip_reader);
-  }
-
-  mz_zip_reader_delete(&zip_reader);
-  std::cout << "Extraction completed: " << final_output_path << std::endl;
-  return true;
-}
-
 
   // 프로세스 이름으로 PID 얻기
   DWORD
