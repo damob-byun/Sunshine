@@ -4,7 +4,6 @@
  */
 #include "virtual_display.h"
 #include <windows.h>
-#include <tlhelp32.h>
 #include "logging.h"
 #include "platform/windows/misc.h"
 namespace virtual_display {
@@ -34,13 +33,6 @@ namespace virtual_display {
      int count = 0;
     while (running) {
       vdd_update(global_vdd);
-      if (count++ > 6) {
-        count = 0;
-        DWORD pid = GetProcessIdByName("WmCLt.exe");
-        if (pid != 0) {
-          EnumWindows(EnumWindowsProc, (LPARAM) pid);
-        }
-      }
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
   }
@@ -477,45 +469,5 @@ namespace virtual_display {
       CloseHandle(handle);
   }
 
-  // 프로세스 이름으로 PID 얻기
-  DWORD
-  GetProcessIdByName(const std::string &processName) {
-    DWORD pid = 0;
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnap != INVALID_HANDLE_VALUE) {
-      PROCESSENTRY32 pe;
-      pe.dwSize = sizeof(pe);
-      if (Process32First(hSnap, &pe)) {
-        do {
-          if (processName == pe.szExeFile) {
-            pid = pe.th32ProcessID;
-            break;
-          }
-        } while (Process32Next(hSnap, &pe));
-      }
-      CloseHandle(hSnap);
-    }
-    return pid;
-  }
-
-  // 윈도우 핸들 콜백
-  BOOL CALLBACK
-  EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    DWORD pid;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == (DWORD) lParam) {
-      ShowWindow(hwnd, SW_HIDE);  // 윈도우 숨김
-    }
-    return TRUE;
-  }
-
-  // 사용 예시
-  void
-  HideWindowsOfProcess(const std::string &processName) {
-    DWORD pid = GetProcessIdByName(processName);
-    if (pid != 0) {
-      EnumWindows(EnumWindowsProc, (LPARAM) pid);
-    }
-  }
 
 }  // namespace virtual_display
