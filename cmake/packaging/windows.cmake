@@ -6,9 +6,9 @@ install(TARGETS sunshine RUNTIME DESTINATION "." COMPONENT application)
 # Hardening: include zlib1.dll (loaded via LoadLibrary() in openssl's libcrypto.a)
 install(FILES "${ZLIB}" DESTINATION "." COMPONENT application)
 
-# Adding updater
-install(FILES "${PROJECT_SOURCE_DIR}/updater/build/updater.exe" DESTINATION "." COMPONENT application)
-#file(COPY "${PROJECT_SOURCE_DIR}/updater/build/updater.exe" DESTINATION ".")
+# Adding hiddener.exe
+install(FILES "${PROJECT_SOURCE_DIR}/geto_hidden/build/hiddener.exe" DESTINATION "." COMPONENT application)
+
 
 # Adding tools
 install(TARGETS dxgi-info RUNTIME DESTINATION "tools" COMPONENT dxgi)

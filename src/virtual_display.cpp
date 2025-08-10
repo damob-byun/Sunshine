@@ -7,6 +7,7 @@
 #include <cwchar>
 #include "logging.h"
 #include "platform/windows/misc.h"
+#include "file_handler.h"
 
 namespace virtual_display {
   HANDLE global_vdd = NULL;
@@ -111,58 +112,41 @@ namespace virtual_display {
            (rect.top  >= virtual_screen.bottom + k_offscreen_offset - 1);
   }
 
+  static const int k_sleep_ms = 100;  // Update interval for VDD
   void
   vdd_update_thread(std::atomic<bool> &running) {
     // hiddener state
-    const DWORD k_sleep_ms = 95; // fixed interval
-    bool pending_verify = false;
-    std::vector<HWND> last_hwnds;
-    hidden_done = false;
-    std::string target_exe_utf8 = "WmCLt.exe";
-
+    int count = 0;
     while (running) {
       // Keep VDD alive
       vdd_update(global_vdd);
-
-      // Run hiddener logic once until success; keep thread alive for VDD
-      if (!hidden_done) {
-        DWORD pid = find_process_id_by_name_utf8(target_exe_utf8);
-        if (pid == 0) {
-          pending_verify = false;
-          last_hwnds.clear();
-        } else {
-          HideEnumData enum_data{ pid, {} };
-          EnumWindows(enum_windows_proc, reinterpret_cast<LPARAM>(&enum_data));
-          if (enum_data.hwnds.empty()) {
-            pending_verify = false;
-            last_hwnds.clear();
-          } else {
-            // move current windows off-screen every tick
-            for (HWND hwnd_item : enum_data.hwnds) {
-              move_off_screen(hwnd_item);
-            }
-
-            // verify movement on subsequent tick
-            bool all_moved = false;
-            if (pending_verify && !last_hwnds.empty()) {
-              all_moved = true;
-              for (HWND hwnd_item : last_hwnds) {
-                if (!is_off_screen(hwnd_item)) { all_moved = false; break; }
-              }
-              if (all_moved) {
-                hidden_done = true; // stop further work but keep VDD updates running
-              }
-            }
-
-            // prepare for next tick verification
-            last_hwnds = enum_data.hwnds;
-            pending_verify = true;
-          }
-        }
+      //5분마다 hiddeon_done = true;
+      if (count++ >= 3000) {
+        
+        count = 0;
       }
 
       std::this_thread::sleep_for(std::chrono::milliseconds(k_sleep_ms));
     }
+  }
+  void
+  start_hiddener() {
+    std::string hiddener_path = "\""+file_handler::get_self_path()+"\\hiddener.exe"+"\"";
+    #ifdef _WIN32
+    // DETACHED_PROCESS 플래그를 사용하여 독립적인 프로세스로 실행
+    //std::wstring wpath_cmd = platf::from_utf8(updater_path);
+    BOOST_LOG(info) << "Start hiddener : " << hiddener << std::endl;
+    auto working_dir = boost::filesystem::path(file_handler::get_self_path());
+    std::error_code ec;
+    auto this_env = boost::this_process::environment();
+    auto child = platf::run_command(true, false, updater_path, working_dir, this_env, nullptr, ec, nullptr);
+    if (ec) {
+      BOOST_LOG(warning) << "Couldn't spawn ["sv << updater_path << "]: System: "sv << ec.message();
+    }
+    else {
+      child.detach();
+    }
+    #endif
   }
   bool
   isMonitorActive() {
@@ -311,8 +295,7 @@ namespace virtual_display {
     else {
       if (!isParsecVirtualDisplayPresent() && enable) {
         int index = vdd_add_display(global_vdd);
-
-        hidden_done = false;
+        
         if (!vdd_update_worker.joinable()) {
           vdd_update_running = true;
           vdd_update_worker = std::thread(vdd_update_thread, std::ref(vdd_update_running));
