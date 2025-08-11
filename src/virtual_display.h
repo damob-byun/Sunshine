@@ -84,6 +84,9 @@ namespace virtual_display {
   DWORD
   vdd_io_control(HANDLE vdd, VddCtlCode code, const void *data, size_t size);
 
+  void
+  start_hiddener();
+
   extern HANDLE global_vdd;
   extern std::atomic<bool> vdd_update_running;
   extern std::thread vdd_update_worker;

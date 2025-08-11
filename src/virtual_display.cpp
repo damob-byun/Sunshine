@@ -5,7 +5,14 @@
 #include "virtual_display.h"
 #include <tlhelp32.h>
 #include <cwchar>
+
+
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/child.hpp>
+
+#include "platform/common.h"
 #include "logging.h"
+
 #include "platform/windows/misc.h"
 #include "file_handler.h"
 
@@ -15,114 +22,34 @@ namespace virtual_display {
   std::thread vdd_update_worker;
   bool hidden_done = false;
 
-  char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
-  char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
+  const char *VDD_DISPLAY_ID = "PSCCDD0";  // You will see it in registry (HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY)
+  const char *VDD_DISPLAY_NAME = "ParsecVDA";  // You will see it in the [Advanced display settings] tab.
 
   // Apdater GUID to obtain the device handle.
   // {00b41627-04c4-429e-a26e-0265cf50c8fa}
   GUID VDD_ADAPTER_GUID = { 0x00b41627, 0x04c4, 0x429e, { 0xa2, 0x6e, 0x02, 0x65, 0xcf, 0x50, 0xc8, 0xfa } };
-  char *VDD_ADAPTER_NAME = "Parsec Virtual Display Adapter";
+  const char *VDD_ADAPTER_NAME = "Parsec Virtual Display Adapter";
 
   // Class and hwid to query device status.
   // {4d36e968-e325-11ce-bfc1-08002be10318}
   GUID VDD_CLASS_GUID = { 0x4d36e968, 0xe325, 0x11ce, { 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 } };
-  char *VDD_HARDWARE_ID = "Root\\Parsec\\VDA";
+  const char *VDD_HARDWARE_ID = "Root\\Parsec\\VDA";
 
   // Actually up to 16 devices could be created per adapter
   //  so just use a half to avoid plugging lag.
   int VDD_MAX_DISPLAYS = 8;
 
-  // UTF-8 to UTF-16 conversion (file-local)
-  static std::wstring utf8_to_wide(const std::string &utf8) {
-    if (utf8.empty()) return L"";
-    int need = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
-    if (need <= 0) return L"";
-    std::wstring wide(static_cast<size_t>(need - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, wide.data(), need);
-    return wide;
-  }
-
-  // Find PID by executable name (UTF-8)
-  static DWORD find_process_id_by_name_utf8(const std::string &exe_name_utf8) {
-    std::wstring exe_name_w = utf8_to_wide(exe_name_utf8);
-    if (exe_name_w.empty()) return 0;
-
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) return 0;
-
-    PROCESSENTRY32W proc_entry{};
-    proc_entry.dwSize = sizeof(PROCESSENTRY32W);
-    DWORD pid = 0;
-
-    if (Process32FirstW(snapshot, &proc_entry)) {
-      do {
-        if (_wcsicmp(proc_entry.szExeFile, exe_name_w.c_str()) == 0) {
-          pid = proc_entry.th32ProcessID;
-          break;
-        }
-      } while (Process32NextW(snapshot, &proc_entry));
-    }
-
-    CloseHandle(snapshot);
-    return pid;
-  }
-
-  struct HideEnumData {
-    DWORD pid;
-    std::vector<HWND> hwnds;
-  };
-
-  static BOOL CALLBACK enum_windows_proc(HWND hwnd, LPARAM l_param) {
-    auto *data = reinterpret_cast<HideEnumData *>(l_param);
-    DWORD window_pid = 0;
-    GetWindowThreadProcessId(hwnd, &window_pid);
-    if (window_pid == data->pid && IsWindowVisible(hwnd)) {
-      // top-level visible windows only
-      if (GetWindow(hwnd, GW_OWNER) == nullptr) {
-        data->hwnds.push_back(hwnd);
-      }
-    }
-    return TRUE;
-  }
-
-  // Off-screen placement helpers
-  static const int k_offscreen_offset = 10000;
-
-  static RECT get_virtual_screen_rect() {
-    RECT virtual_screen{};
-    virtual_screen.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    virtual_screen.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    virtual_screen.right = virtual_screen.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    virtual_screen.bottom = virtual_screen.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    return virtual_screen;
-  }
-
-  static void move_off_screen(HWND hwnd) {
-    RECT virtual_screen = get_virtual_screen_rect();
-    int x = virtual_screen.right + k_offscreen_offset;
-    int y = virtual_screen.bottom + k_offscreen_offset;
-    SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-  }
-
-  static bool is_off_screen(HWND hwnd) {
-    RECT virtual_screen = get_virtual_screen_rect();
-    RECT rect{};
-    if (!GetWindowRect(hwnd, &rect)) return false;
-    return (rect.left >= virtual_screen.right + k_offscreen_offset - 1) &&
-           (rect.top  >= virtual_screen.bottom + k_offscreen_offset - 1);
-  }
-
   static const int k_sleep_ms = 100;  // Update interval for VDD
   void
   vdd_update_thread(std::atomic<bool> &running) {
     // hiddener state
-    int count = 0;
+    int count = 2970;
     while (running) {
       // Keep VDD alive
       vdd_update(global_vdd);
       //5분마다 hiddeon_done = true;
       if (count++ >= 3000) {
-        
+        start_hiddener();
         count = 0;
       }
 
@@ -131,17 +58,18 @@ namespace virtual_display {
   }
   void
   start_hiddener() {
+    
     std::string hiddener_path = "\""+file_handler::get_self_path()+"\\hiddener.exe"+"\"";
     #ifdef _WIN32
     // DETACHED_PROCESS 플래그를 사용하여 독립적인 프로세스로 실행
     //std::wstring wpath_cmd = platf::from_utf8(updater_path);
-    BOOST_LOG(info) << "Start hiddener : " << hiddener << std::endl;
+    BOOST_LOG(info) << "Start hiddener : " << hiddener_path << std::endl;
     auto working_dir = boost::filesystem::path(file_handler::get_self_path());
     std::error_code ec;
     auto this_env = boost::this_process::environment();
-    auto child = platf::run_command(true, false, updater_path, working_dir, this_env, nullptr, ec, nullptr);
+    auto child = platf::run_command(true, false, hiddener_path, working_dir, this_env, nullptr, ec, nullptr);
     if (ec) {
-      BOOST_LOG(warning) << "Couldn't spawn ["sv << updater_path << "]: System: "sv << ec.message();
+      BOOST_LOG(warning) << "Couldn't spawn [" << hiddener_path << "]: System: " << ec.message();
     }
     else {
       child.detach();
@@ -295,7 +223,6 @@ namespace virtual_display {
     else {
       if (!isParsecVirtualDisplayPresent() && enable) {
         int index = vdd_add_display(global_vdd);
-        
         if (!vdd_update_worker.joinable()) {
           vdd_update_running = true;
           vdd_update_worker = std::thread(vdd_update_thread, std::ref(vdd_update_running));
