@@ -62,6 +62,8 @@
 #endif
 
 #include <winternl.h>
+
+#include <tlhelp32.h>
 extern "C" {
 NTSTATUS NTAPI
 NtSetTimerResolution(ULONG DesiredResolution, BOOLEAN SetResolution, PULONG CurrentResolution);
@@ -1313,6 +1315,52 @@ namespace platf {
     lifetime::exit_sunshine(0, true);
   }
 
+  void
+  reboot_system() {
+    // Try to obtain shutdown privilege
+    std::vector<std::string> game_procs = {
+      "fifaw.exe",
+      "FIFAW.exe",
+      "FIFAOnline4.exe",
+      "LostArk.exe",
+      "lax.exe",
+      "MapleStory.exe",
+      "MapleStory.bin"
+    };
+
+    for (const auto &proc : game_procs) {
+      BOOST_LOG(info) << "Requesting graceful exit for: " << proc;
+      std::string cmd = "taskkill /IM \"" + proc + "\" /T > nul 2>&1";
+      system(cmd.c_str());
+    }
+
+    // Give apps a moment to shut down cleanly
+    Sleep(2000);
+
+    for (const auto &proc : game_procs) {
+      BOOST_LOG(info) << "Forcing termination for: " << proc;
+      std::string cmd = "taskkill /F /IM \"" + proc + "\" /T > nul 2>&1";
+      system(cmd.c_str());
+    }
+
+    // Now obtain shutdown privilege and request a reboot
+    HANDLE token = nullptr;
+    TOKEN_PRIVILEGES tp;
+    LUID luid;
+
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+      if (LookupPrivilegeValue(nullptr, SE_SHUTDOWN_NAME, &luid)) {
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Luid = luid;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(token, FALSE, &tp, sizeof(TOKEN_PRIVILEGES), nullptr, nullptr);
+      }
+      CloseHandle(token);
+    }
+    Sleep(2000);
+    system("shutdown /r /t 0");
+  }
+
   int
   set_env(const std::string &name, const std::string &value) {
     return _putenv_s(name.c_str(), value.c_str());
@@ -1906,4 +1954,56 @@ namespace platf {
   create_high_precision_timer() {
     return std::make_unique<win32_high_precision_timer>();
   }
+
+  bool
+  kill_processes_by_name(const std::string &process_name) {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+      return false;
+    }
+
+    PROCESSENTRY32 process_entry;
+    process_entry.dwSize = sizeof(PROCESSENTRY32);
+
+    bool process_killed = false;
+
+    if (Process32First(snapshot, &process_entry)) {
+      do {
+        if (process_name == process_entry.szExeFile) {
+          HANDLE process_handle = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION, FALSE, process_entry.th32ProcessID);
+          if (process_handle) {
+            if (TerminateProcess(process_handle, 0)) {
+              CloseHandle(process_handle);
+              process_killed = true;
+            }
+            else {
+              CloseHandle(process_handle);
+            }
+          }
+        }
+      } while (Process32Next(snapshot, &process_entry));
+    }
+
+    CloseHandle(snapshot);
+
+    if (process_killed) {
+      // 확인: 프로세스가 종료되었는지 검사
+      snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+      if (snapshot != INVALID_HANDLE_VALUE) {
+        if (Process32First(snapshot, &process_entry)) {
+          do {
+            if (process_name == process_entry.szExeFile) {
+              CloseHandle(snapshot);
+              return false;  // 아직 살아있음
+            }
+          } while (Process32Next(snapshot, &process_entry));
+        }
+        CloseHandle(snapshot);
+      }
+      return true;  // 정상적으로 종료됨
+    }
+
+    return false;
+  }
+
 }  // namespace platf

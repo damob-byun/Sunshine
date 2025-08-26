@@ -329,6 +329,16 @@ namespace platf {
     lifetime::exit_sunshine(0, true);
   }
 
+  void
+  reboot_system() {
+    // Attempt a graceful reboot via reboot(2)
+    sync();
+    if (reboot(RB_AUTOBOOT) != 0) {
+      BOOST_LOG(warning) << "reboot(2) failed: " << errno << ", falling back to shutdown -r now";
+      system("shutdown -r now");
+    }
+  }
+
   int
   set_env(const std::string &name, const std::string &value) {
     return setenv(name.c_str(), value.c_str(), 1);

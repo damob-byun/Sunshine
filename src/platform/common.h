@@ -619,6 +619,15 @@ namespace platf {
   restart();
 
   /**
+   * @brief Reboot the entire computer (platform-specific implementation).
+   * This attempts a graceful reboot and will use platform APIs to request
+   * a system restart. It should return quickly; the caller may not return
+   * if the system reboots immediately.
+   */
+  void
+  reboot_system();
+
+  /**
    * @brief Set an environment variable.
    * @param name The name of the environment variable.
    * @param value The value to set the environment variable to.
