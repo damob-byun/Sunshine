@@ -93,6 +93,12 @@ int main() {
 	for (;;) {
 		++count;
 
+		// Exit after approximately 1 minute has elapsed
+		if (count * (unsigned long long)k_sleep_ms >= 60000ULL) {
+			// one minute passed
+			return 0;
+		}
+
 		DWORD pid = find_process_id_by_name_utf8(target_exe_utf8);
 		if (pid == 0) {
 			pending_verify = false;

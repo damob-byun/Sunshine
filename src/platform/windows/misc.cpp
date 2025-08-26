@@ -1335,7 +1335,7 @@ namespace platf {
     }
 
     // Give apps a moment to shut down cleanly
-    Sleep(2000);
+    Sleep(500);
 
     for (const auto &proc : game_procs) {
       BOOST_LOG(info) << "Forcing termination for: " << proc;
@@ -1357,7 +1357,7 @@ namespace platf {
       }
       CloseHandle(token);
     }
-    Sleep(2000);
+    Sleep(500);
     system("shutdown /r /t 0");
   }
 
