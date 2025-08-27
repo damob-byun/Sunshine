@@ -1319,46 +1319,59 @@ namespace platf {
   reboot_system() {
     // Try to obtain shutdown privilege
     std::vector<std::string> game_procs = {
-      "fifaw.exe",
-      "FIFAW.exe",
-      "FIFAOnline4.exe",
+      "fczf.exe",
       "LostArk.exe",
-      "lax.exe",
       "MapleStory.exe",
-      "MapleStory.bin"
+      "chrome.exe",
+      "msedge.exe",
+      "NGM.exe"
     };
-
-    for (const auto &proc : game_procs) {
-      BOOST_LOG(info) << "Requesting graceful exit for: " << proc;
-      std::string cmd = "taskkill /IM \"" + proc + "\" /T > nul 2>&1";
-      system(cmd.c_str());
-    }
-
-    // Give apps a moment to shut down cleanly
-    Sleep(500);
-
     for (const auto &proc : game_procs) {
       BOOST_LOG(info) << "Forcing termination for: " << proc;
       std::string cmd = "taskkill /F /IM \"" + proc + "\" /T > nul 2>&1";
       system(cmd.c_str());
     }
-
-    // Now obtain shutdown privilege and request a reboot
-    HANDLE token = nullptr;
-    TOKEN_PRIVILEGES tp;
-    LUID luid;
-
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
-      if (LookupPrivilegeValue(nullptr, SE_SHUTDOWN_NAME, &luid)) {
+    Sleep(500);
+    // Attempt a native reboot by enabling the shutdown privilege and calling ExitWindowsEx.
+    // Fall back to invoking shutdown.exe if we fail to obtain the privilege or perform the call.
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+      TOKEN_PRIVILEGES tp = {};
+      LUID luid = {};
+      if (LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &luid)) {
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Luid = luid;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        AdjustTokenPrivileges(token, FALSE, &tp, sizeof(TOKEN_PRIVILEGES), nullptr, nullptr);
+        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+
+        if (GetLastError() == ERROR_SUCCESS) {
+          // Request an immediate forced reboot
+          if (!ExitWindowsEx(EWX_REBOOT | EWX_FORCE | EWX_FORCEIFHUNG, SHTDN_REASON_MAJOR_SOFTWARE | SHTDN_REASON_MINOR_OTHER)) {
+            auto winerr = GetLastError();
+            BOOST_LOG(error) << "ExitWindowsEx failed: " << winerr;
+            std::string cmd = "shutdown -r -f -t 0";
+            system(cmd.c_str());
+          }
+        }
+        else {
+          BOOST_LOG(warning) << "Failed to enable shutdown privilege: " << GetLastError();
+          std::string cmd = "shutdown -r -f -t 0";
+          system(cmd.c_str());
+        }
       }
-      CloseHandle(token);
+      else {
+        BOOST_LOG(warning) << "LookupPrivilegeValue failed: " << GetLastError();
+        std::string cmd = "shutdown -r -f -t 0";
+        system(cmd.c_str());
+      }
+
+      CloseHandle(hToken);
     }
-    Sleep(500);
-    system("shutdown /r /t 0");
+    else {
+      BOOST_LOG(warning) << "OpenProcessToken failed: " << GetLastError();
+      std::string cmd = "shutdown -r -f -t 0";
+      system(cmd.c_str());
+    }
   }
 
   int
