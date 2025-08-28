@@ -1338,7 +1338,7 @@ namespace platf {
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
       TOKEN_PRIVILEGES tp = {};
       LUID luid = {};
-      if (LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &luid)) {
+  if (LookupPrivilegeValueW(NULL, L"SeShutdownPrivilege", &luid)) {
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Luid = luid;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;

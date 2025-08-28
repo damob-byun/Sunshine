@@ -771,7 +771,7 @@ namespace confighttp {
     BOOST_LOG(warning) << "Restart Computer Command: "sv;
     // We may not return from this call
     platf::reboot_system();
-    
+    response->write("ok");
   }
 
   /**
