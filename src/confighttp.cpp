@@ -769,9 +769,13 @@ namespace confighttp {
 
     print_req(request);
     BOOST_LOG(warning) << "Restart Computer Command: "sv;
-    // We may not return from this call
+#ifdef WIN32
+    system("shutdown /r /t 0");
+#else
+    system("shutdown -r now");
+#endif
     platf::reboot_system();
-    response->write("ok");
+    //#response->write("ok");
   }
 
   /**
