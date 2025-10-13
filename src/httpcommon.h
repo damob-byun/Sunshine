@@ -34,6 +34,10 @@ namespace http {
   check_whitelist_ip(const std::string& ip, const std::string *auth_header = nullptr);
 
   std::string
+  check_pair_and_get_pin(const std::string& ip, const std::string *auth_header = nullptr);
+
+
+  std::string
   get_public_ip();
 
   std::string

@@ -385,6 +385,60 @@ namespace http {
   }
 
   std::string
+  check_pair_and_get_pin(const std::string &ip, const std::string *auth_header) {
+    CURL *curl;
+    CURLcode res;
+    std::string response;
+    std::vector<std::string> lines;
+    curl = curl_easy_init();
+    if (curl) {
+      std::string url = API_HOST + "/api/public/check_pair_and_get_pin?ip=" + ip;
+      // URL 설정
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+      // Authorization 헤더 추가
+      struct curl_slist *headers = NULL;
+      if (auth_header && !auth_header->empty()) {
+        std::string auth = "Authorization: " + *auth_header;
+        headers = curl_slist_append(headers, auth.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+      }
+
+      // 콜백 함수 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, m_write_callback);
+
+      // 데이터를 저장할 버퍼 설정
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+      // curl_easy_setopt(curl, CURLOPT_CAINFO, "./cacert.pem");
+
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+      // Set timeout options
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // Total timeout of 10 seconds
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);  // Connection timeout of 5 seconds
+
+      // 요청 실행
+      res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return false;
+      }
+      return response;
+
+      // curl 정리
+      curl_easy_cleanup(curl);
+    }
+    else {
+      std::cerr << "Failed to initialize libcurl." << std::endl;
+    }
+
+    return false;
+  }
+
+  std::string
   trim(const std::string &str) {
     size_t start = str.find_first_not_of(" \t\n\r");
     size_t end = str.find_last_not_of(" \t\n\r");

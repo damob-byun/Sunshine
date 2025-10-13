@@ -590,6 +590,7 @@ namespace nvhttp {
       response->write("forbidden"s);
       return;
     }
+    
     pt::ptree tree;
 
     auto fg = util::fail_guard([&]() {
@@ -623,20 +624,19 @@ namespace nvhttp {
         auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
-        if (config::sunshine.flags[config::flag::PIN_STDIN]) {
-          std::string pin;
-
-          std::cout << "Please insert pin: "sv;
-          std::getline(std::cin, pin);
-
+        
+        auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
+        auto auth_header = request->header.find("Authorization");
+        const std::string *auth_value_ptr = nullptr;
+        if (auth_header != request->header.end()) {
+          auth_value_ptr = &auth_header->second;
+        }
+        std::string pin = http::check_pair_and_get_pin(address, auth_value_ptr);
+        if (!pin.empty()) {
           getservercert(ptr->second, tree, pin);
         }
         else {
-#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
-          system_tray::update_tray_require_pin();
-#endif
           ptr->second.async_insert_pin.response = std::move(response);
-
           fg.disable();
           return;
         }
