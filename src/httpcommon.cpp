@@ -424,7 +424,7 @@ namespace http {
       if (res != CURLE_OK) {
         std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
         curl_easy_cleanup(curl);
-        return false;
+        return response;
       }
       return response;
 
@@ -435,7 +435,7 @@ namespace http {
       std::cerr << "Failed to initialize libcurl." << std::endl;
     }
 
-    return false;
+    return response;
   }
 
   std::string

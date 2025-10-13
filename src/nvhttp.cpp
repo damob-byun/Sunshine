@@ -613,6 +613,16 @@ namespace nvhttp {
     auto sess_it = map_id_sess.find(uniqID);
 
     args_t::const_iterator it;
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
+    auto auth_header = request->header.find("Authorization");
+    const std::string *auth_value_ptr = nullptr;
+    if (auth_header != request->header.end()) {
+          auth_value_ptr = &auth_header->second;
+    }
+    
+    std::string pin = http::check_pair_and_get_pin(address, auth_value_ptr);
+   
+
     if (it = args.find("phrase"); it != std::end(args)) {
       if (it->second == "getservercert"sv) {
         pair_session_t sess;
@@ -625,16 +635,9 @@ namespace nvhttp {
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
         
-        auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
-        auto auth_header = request->header.find("Authorization");
-        const std::string *auth_value_ptr = nullptr;
-        if (auth_header != request->header.end()) {
-          auth_value_ptr = &auth_header->second;
-        }
-        BOOST_LOG(debug) << "API: ["sv << address << "] -- check_pair_and_get_pin"sv;
-        std::string pin = http::check_pair_and_get_pin(address, auth_value_ptr);
-        BOOST_LOG(warning) << "API: pin ["sv << pin << "] -- check_pair_and_get_pin"sv;
+        
         if (!pin.empty()) {
+           BOOST_LOG(warning) << "API: pin ["sv << pin << "] -- check_pair_and_get_pin"sv;
           getservercert(ptr->second, tree, pin);
         }
         else {
