@@ -631,7 +631,9 @@ namespace nvhttp {
         if (auth_header != request->header.end()) {
           auth_value_ptr = &auth_header->second;
         }
+        BOOST_LOG(debug) << "API: ["sv << address << "] -- check_pair_and_get_pin"sv;
         std::string pin = http::check_pair_and_get_pin(address, auth_value_ptr);
+        BOOST_LOG(warning) << "API: pin ["sv << pin << "] -- check_pair_and_get_pin"sv;
         if (!pin.empty()) {
           getservercert(ptr->second, tree, pin);
         }
