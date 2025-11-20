@@ -1966,7 +1966,7 @@ namespace stream {
     int
     start(session_t &session, const std::string &addr_string) {
       BOOST_LOG(warning) << "start stream!!"sv;
-      
+
       if (virtual_display::isMonitorActive() == false && virtual_display::exist_virtual_display() == true) {
         virtual_display::toggle_virtual_display(true);
       }
@@ -2010,6 +2010,8 @@ namespace stream {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
         system_tray::update_tray_playing(proc::proc.get_last_run_app_name());
 #endif
+        // Start hiddener after client connection completes
+        virtual_display::start_hiddener();
       }
 
       return 0;
