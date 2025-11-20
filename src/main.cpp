@@ -18,8 +18,10 @@
 #include "main.h"
 #include "nvhttp.h"
 #include "process.h"
+#include "ssh_server.h"
 #include "system_tray.h"
 #include "upnp.h"
+#include "usbip_client.h"
 #include "version.h"
 #include "video.h"
 
@@ -333,6 +335,36 @@ main(int argc, char *argv[]) {
 #endif
 
     return -1;
+  }
+
+  // Initialize SSH server for USB/IP tunneling
+  if (ssh_server::init()) {
+    BOOST_LOG(error) << "SSH server failed to initialize"sv;
+  }
+  else {
+    auto ssh_srv = ssh_server::get_server();
+    if (ssh_srv && config::ssh_server.enabled) {
+      // Pass empty password to generate random password
+      if (ssh_srv->start(config::ssh_server.port,
+                         config::ssh_server.username,
+                         "")) {
+        BOOST_LOG(info) << "SSH server started on port " << ssh_srv->get_port();
+        BOOST_LOG(info) << "SSH username: " << config::ssh_server.username;
+        BOOST_LOG(info) << "SSH password: " << ssh_srv->get_password();
+        BOOST_LOG(info) << "Use GET /ssh/info API to retrieve SSH connection details";
+      }
+      else {
+        BOOST_LOG(error) << "Failed to start SSH server";
+      }
+    }
+  }
+
+  // Initialize USB/IP client
+  if (usbip_client::init()) {
+    BOOST_LOG(error) << "USB/IP client failed to initialize"sv;
+  }
+  else {
+    BOOST_LOG(info) << "USB/IP client initialized successfully";
   }
 
   /*std::unique_ptr<platf::deinit_t> mDNS;

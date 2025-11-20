@@ -458,6 +458,21 @@ namespace config {
     {},  // prep commands
   };
 
+  ssh_server_t ssh_server {
+    false,  // enabled - SSH server disabled by default
+    0,  // port - 0 for dynamic port allocation
+    "sunshine",  // username
+    "",  // password - empty means generate random password
+    {},  // host_key_file
+  };
+
+  usbip_t usbip {
+    false,  // enabled - USB/IP disabled by default
+    3240,  // default_port - standard USB/IP port
+    false,  // auto_import - don't automatically import devices
+    {},  // allowed_devices - empty means all devices allowed
+  };
+
   bool
   endline(char ch) {
     return ch == '\r' || ch == '\n';

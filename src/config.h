@@ -118,6 +118,21 @@ namespace config {
     std::string external_ip;
   };
 
+  struct ssh_server_t {
+    bool enabled;  // Enable SSH server for USB/IP tunneling
+    int port;  // SSH server port (0 for dynamic allocation)
+    std::string username;  // SSH authentication username
+    std::string password;  // SSH authentication password
+    std::string host_key_file;  // SSH host key file path
+  };
+
+  struct usbip_t {
+    bool enabled;  // Enable USB/IP client functionality
+    int default_port;  // Default USB/IP server port (usually 3240)
+    bool auto_import;  // Automatically import devices when tunnel is established
+    std::vector<std::string> allowed_devices;  // List of allowed device patterns (e.g., "1-*")
+  };
+
   struct input_t {
     std::unordered_map<int, int> keybindings;
 
@@ -192,6 +207,8 @@ namespace config {
   extern nvhttp_t nvhttp;
   extern input_t input;
   extern sunshine_t sunshine;
+  extern ssh_server_t ssh_server;
+  extern usbip_t usbip;
 
   int
   parse(int argc, char *argv[]);

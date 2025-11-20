@@ -32,7 +32,9 @@
 #include "platform/common.h"
 #include "process.h"
 #include "rtsp.h"
+#include "ssh_server.h"
 #include "system_tray.h"
+#include "usbip_client.h"
 #include "utility.h"
 #include "uuid.h"
 #include "video.h"
@@ -1084,6 +1086,257 @@ namespace nvhttp {
     response->close_connection_after_response = true;
   }
 
+  // SSH server info endpoint
+  void
+  ssh_info(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
+
+    pt::ptree tree;
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      auto ssh_srv = ssh_server::get_server();
+      if (!ssh_srv) {
+        tree.put("status", "error");
+        tree.put("message", "SSH server not initialized");
+        return;
+      }
+
+      if (!ssh_srv->is_running()) {
+        tree.put("status", "error");
+        tree.put("message", "SSH server is not running");
+        tree.put("enabled", false);
+        return;
+      }
+
+      tree.put("status", "success");
+      tree.put("enabled", true);
+      tree.put("port", ssh_srv->get_port());
+      tree.put("username", config::ssh_server.username);
+      tree.put("password", ssh_srv->get_password());
+
+      // Get active tunnels count
+      auto tunnels = ssh_srv->get_active_tunnels();
+      tree.put("active_tunnels", tunnels.size());
+    }
+    catch (const std::exception &e) {
+      BOOST_LOG(error) << "Error in ssh_info: " << e.what();
+      tree.put("status", "error");
+      tree.put("message", e.what());
+    }
+  }
+
+  // USB/IP device list endpoint
+  void
+  usbip_devlist(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
+
+    pt::ptree tree;
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      // Get SSH server instance
+      auto ssh_srv = ssh_server::get_server();
+      if (!ssh_srv || !ssh_srv->is_running()) {
+        tree.put("status", "error");
+        tree.put("message", "SSH server is not running");
+        return;
+      }
+
+      // Get active tunnels from SSH server
+      auto tunnels = ssh_srv->get_active_tunnels();
+      if (tunnels.empty()) {
+        tree.put("status", "success");
+        tree.put("message", "No active SSH tunnels");
+        pt::ptree devices_array;
+        tree.add_child("devices", devices_array);
+        return;
+      }
+
+      // For each tunnel, get USB/IP device list
+      pt::ptree devices_array;
+      auto usbip_mgr = usbip_client::get_manager();
+
+      for (const auto &tunnel : tunnels) {
+        // Connect to USB/IP server through SSH tunnel
+        auto client = usbip_mgr->create_client("localhost", tunnel.forwarded_port);
+        if (!client) {
+          BOOST_LOG(warning) << "Failed to connect to USB/IP server via tunnel on port " << tunnel.forwarded_port;
+          continue;
+        }
+
+        // Get device list
+        auto devices = client->get_device_list();
+        for (const auto &device : devices) {
+          pt::ptree device_node;
+          device_node.put("client_id", tunnel.client_id);
+          device_node.put("client_ip", tunnel.client_ip);
+          device_node.put("busid", device.busid);
+          device_node.put("path", device.path);
+          device_node.put("busnum", device.busnum);
+          device_node.put("devnum", device.devnum);
+          device_node.put("speed", device.speed);
+          device_node.put("idVendor", device.idVendor);
+          device_node.put("idProduct", device.idProduct);
+          device_node.put("bDeviceClass", static_cast<int>(device.bDeviceClass));
+          device_node.put("manufacturer", device.manufacturer);
+          device_node.put("product", device.product);
+          device_node.put("serial", device.serial);
+
+          devices_array.push_back(std::make_pair("", device_node));
+        }
+
+        // Disconnect after getting list
+        client->disconnect();
+      }
+
+      tree.put("status", "success");
+      tree.add_child("devices", devices_array);
+    }
+    catch (const std::exception &e) {
+      BOOST_LOG(error) << "Error in usbip_devlist: " << e.what();
+      tree.put("status", "error");
+      tree.put("message", e.what());
+    }
+  }
+
+  // USB/IP device import (mount) endpoint
+  void
+  usbip_import(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
+
+    pt::ptree tree;
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      auto args = request->parse_query_string();
+      std::string client_id = get_arg(args, "client_id");
+      std::string busid = get_arg(args, "busid");
+
+      // Get SSH server and find tunnel
+      auto ssh_srv = ssh_server::get_server();
+      if (!ssh_srv || !ssh_srv->is_running()) {
+        tree.put("status", "error");
+        tree.put("message", "SSH server is not running");
+        return;
+      }
+
+      auto tunnel = ssh_srv->get_tunnel(client_id);
+      if (!tunnel) {
+        tree.put("status", "error");
+        tree.put("message", "Client tunnel not found");
+        return;
+      }
+
+      // Connect to USB/IP server through SSH tunnel
+      auto usbip_mgr = usbip_client::get_manager();
+      auto client = usbip_mgr->create_client("localhost", tunnel->forwarded_port);
+      if (!client) {
+        tree.put("status", "error");
+        tree.put("message", "Failed to connect to USB/IP server");
+        return;
+      }
+
+      // Import the device
+      if (!client->import_device(busid)) {
+        tree.put("status", "error");
+        tree.put("message", "Failed to import device");
+        return;
+      }
+
+      BOOST_LOG(info) << "Successfully imported USB device " << busid << " from client " << client_id;
+      tree.put("status", "success");
+      tree.put("message", "Device imported successfully");
+      tree.put("busid", busid);
+    }
+    catch (const std::exception &e) {
+      BOOST_LOG(error) << "Error in usbip_import: " << e.what();
+      tree.put("status", "error");
+      tree.put("message", e.what());
+    }
+  }
+
+  // USB/IP device export (unmount) endpoint
+  void
+  usbip_export(resp_https_t response, req_https_t request) {
+    print_req<SunshineHTTPS>(request);
+    if (check_whitelist_firewall<SunshineHTTPS>(response, request) == false) {
+      response->write("forbidden"s);
+      return;
+    }
+
+    pt::ptree tree;
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      auto args = request->parse_query_string();
+      std::string busid = get_arg(args, "busid");
+
+      // Find the client that has this device imported
+      auto usbip_mgr = usbip_client::get_manager();
+      auto clients = usbip_mgr->get_clients();
+
+      bool found = false;
+      for (const auto &client : clients) {
+        auto imported = client->get_imported_devices();
+        if (std::find(imported.begin(), imported.end(), busid) != imported.end()) {
+          if (client->export_device(busid)) {
+            found = true;
+            break;
+          }
+        }
+      }
+
+      if (found) {
+        BOOST_LOG(info) << "Successfully exported USB device " << busid;
+        tree.put("status", "success");
+        tree.put("message", "Device exported successfully");
+        tree.put("busid", busid);
+      }
+      else {
+        tree.put("status", "error");
+        tree.put("message", "Device not found or not imported");
+      }
+    }
+    catch (const std::exception &e) {
+      BOOST_LOG(error) << "Error in usbip_export: " << e.what();
+      tree.put("status", "error");
+      tree.put("message", e.what());
+    }
+  }
+
   void
   start() {
 
@@ -1184,6 +1437,10 @@ namespace nvhttp {
     https_server.resource["^/launch$"]["GET"] = [&host_audio](auto resp, auto req) { launch(host_audio, resp, req); };
     https_server.resource["^/resume$"]["GET"] = [&host_audio](auto resp, auto req) { resume(host_audio, resp, req); };
     https_server.resource["^/cancel$"]["GET"] = cancel;
+    https_server.resource["^/ssh/info$"]["GET"] = ssh_info;
+    https_server.resource["^/usbip/devlist$"]["GET"] = usbip_devlist;
+    https_server.resource["^/usbip/import$"]["GET"] = usbip_import;
+    https_server.resource["^/usbip/export$"]["GET"] = usbip_export;
 
     https_server.config.reuse_address = true;
     https_server.config.address = net::af_to_any_address_string(address_family);
